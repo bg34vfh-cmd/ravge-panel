@@ -85,8 +85,9 @@ app.get('/api/verify', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
         
+        // ФИКС: Проверяем наличие записей и достаем ровно первый ОБЪЕКТ из массива rows
         if (result.rows.length === 0) return res.send('{"success":false}');
-        const row = result.rows[0]; // ИСПРАВЛЕНО: Берём именно первый объект из массива rows
+        const row = result.rows[0]; 
 
         if (row.banned_until && Number(row.banned_until) > Date.now()) {
             return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
