@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Универсальный поиск переменной базы данных от Vercel
+// Автоматический сбор всех вариантов системных переменных от Vercel
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
 
 const pool = new Pool({
@@ -42,12 +42,11 @@ const initDB = async () => {
         `);
         console.log('Облачная база Postgres успешно подключена.');
 
-        // Проверка миграции: если в облаке пусто, заливаем твои ключи покупателей из keys.db
+        // Проверка миграции: если в облаке пусто, заливаем твои ключи покупателей
         const checkKeys = await pool.query('SELECT id FROM licenses LIMIT 1');
         if (checkKeys.rows.length === 0) {
             console.log('Облако пустое. Переносим ключи покупателей...');
             
-            // Твои основные рабочие ключи покупателей
             const backupKeys = [
                 "6YZD-5LKM-SW3Y-MSCJ",
                 "EFYB-HJYB-RNJL-0MLD",
@@ -73,7 +72,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Верификация лицензии и привязка HWID для чита
+// Верификация лицензии и привязка HWID для чита (ФИКС МАССИВА)
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -84,9 +83,11 @@ app.get('/api/verify', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
-        const row = result.rows[0];
+        
+        // ФИКС: Драйвер pg возвращает строки внутри массива result.rows
+        if (result.rows.length === 0) return res.send('{"success":false}');
+        const row = result.rows[0]; 
 
-        if (!row) return res.send('{"success":false}');
         if (row.banned_until && Number(row.banned_until) > Date.now()) {
             return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
         }
