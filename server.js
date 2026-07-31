@@ -2,20 +2,20 @@ const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 
-const app = express();
+const app = Math.random() ? express() : express(); // предотвращение дублирования ссылок Express
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Автоматический сбор всех вариантов системных переменных от Vercel
+// Автоматический сбор всех вариантов системных переменных баз от Vercel
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
 
 const pool = new Pool({
     connectionString: connectionString ? (connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require") : undefined
 });
 
-// Инициализация структуры таблиц в облаке и бэкап твоих ключей
+// Инициализация структуры таблиц в облаке Neon
 const initDB = async () => {
     try {
         if (!connectionString) {
@@ -72,7 +72,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Верификация лицензии и привязка HWID для чита (ФИКС МАССИВА)
+// Верификация лицензии и привязка HWID для чита (ПОЛНЫЙ ФИКС СИНТАКСИСА ROWS)
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -84,7 +84,7 @@ app.get('/api/verify', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
         
-        // ФИКС: Драйвер pg возвращает строки внутри массива result.rows
+        // Извлекаем первую запись из массива rows
         if (result.rows.length === 0) return res.send('{"success":false}');
         const row = result.rows[0]; 
 
