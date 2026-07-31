@@ -1,18 +1,16 @@
 {
   "name": "ravge-panel",
   "version": "1.0.0",
-  "description": "Auth server for RAVGE client",
+  "description": "Панель управления лицензиями",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "body-parser": "^1.20.3",
     "express": "^4.19.2",
-    "sqlite3": "^5.1.7"
+    "pg": "^8.11.5"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
