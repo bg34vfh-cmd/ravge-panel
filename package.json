@@ -1,16 +1,21 @@
 {
   "name": "ravge-panel",
   "version": "1.0.0",
-  "description": "Панель управления лицензиями",
+  "description": "Auth server for RAVGE client with permanent Postgres DB",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
+  "engines": {
+    "node": "24.x"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
+    "body-parser": "^1.20.3",
     "express": "^4.19.2",
     "pg": "^8.11.5"
-  },
-  "engines": {
-    "node": "18.x"
   }
 }
