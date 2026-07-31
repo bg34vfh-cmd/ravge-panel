@@ -1,7 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,14 +8,21 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Подключение к твоей постоянной вечной базе данных Postgres на Vercel
+// Универсальный поиск переменной базы данных от Vercel
+const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
+
 const pool = new Pool({
-    connectionString: process.env.POSTGRES_URL + "?sslmode=require",
+    connectionString: connectionString ? (connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require") : undefined
 });
 
-// Инициализация структуры таблиц в облаке и миграция старых ключей
+// Инициализация структуры таблиц в облаке и бэкап твоих ключей
 const initDB = async () => {
     try {
+        if (!connectionString) {
+            console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменные базы данных не найдены в Vercel!");
+            return;
+        }
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id SERIAL PRIMARY KEY,
@@ -36,12 +42,12 @@ const initDB = async () => {
         `);
         console.log('Облачная база Postgres успешно подключена.');
 
-        // ПРОВЕРКА МИГРАЦИИ: Если в облаке пусто, зальем туда дефолтные ключи, чтобы покупатели не слетели
+        // Проверка миграции: если в облаке пусто, заливаем твои ключи покупателей из keys.db
         const checkKeys = await pool.query('SELECT id FROM licenses LIMIT 1');
         if (checkKeys.rows.length === 0) {
             console.log('Облако пустое. Переносим ключи покупателей...');
             
-            // Твои основные рабочие ключи покупателей, которые были в keys.db
+            // Твои основные рабочие ключи покупателей
             const backupKeys = [
                 "6YZD-5LKM-SW3Y-MSCJ",
                 "EFYB-HJYB-RNJL-0MLD",
@@ -58,7 +64,7 @@ const initDB = async () => {
             console.log('Все ключи успешно перенесены в вечное облако!');
         }
     } catch (err) {
-        console.error('Ошибка БД:', err.message);
+        console.error('Ошибка инициализации базы данных:', err.message);
     }
 };
 initDB();
@@ -177,5 +183,5 @@ app.get('/api/admin/keys', async (req, res) => {
 module.exports = app;
 
 if (!process.env.VERCEL) {
-    app.listen(PORT, () => console.log('Локальный сервер запущен на порту ' + PORT));
+    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
 }
