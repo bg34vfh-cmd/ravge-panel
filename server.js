@@ -101,47 +101,48 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// ГЕЙТВЕЙ КЛИЕНТА С АВТОПАРСЕРОМ СТРОК
-app.post('/api/check-license', async (req, res) => {
-    let key = req.body.key;
-    let playerName = req.body.playerName;
-    let serverIp = req.body.serverIp;
+// ГЕЙТВЕЙ ДЛЯ МОДА (ПРИНИМАЕТ GET ЗАПРОСЫ ИЗ КЛАССА LicenseManager)
+app.get('/api/check-license', async (req, res) => {
+    let key = req.query.key;
+    let playerName = req.query.name;
+    let serverIp = req.query.server;
+    let hwid = req.query.hwid;
 
-    // Если JSON не распарсился стандартным способом, достаем данные напрямую из сырого тела запроса
-    if (!key && req.body) {
-        try {
-            const rawText = JSON.stringify(req.body);
-            const keyMatch = rawText.match(/"key"\s*:\s*"([^"]+)"/);
-            const nameMatch = rawText.match(/"playerName"\s*:\s*"([^"]+)"/);
-            const ipMatch = rawText.match(/"serverIp"\s*:\s*"([^"]+)"/);
-            
-            if (keyMatch) key = keyMatch[1];
-            if (nameMatch) playerName = nameMatch[1];
-            if (ipMatch) serverIp = ipMatch[1];
-        } catch (e) {}
-    }
-
-    if (!pool) return res.status(500).json({ error: "База недоступна" });
-    if (!key) return res.status(400).json({ error: "Ключ пуст" });
+    if (!pool) return res.status(500).json({ success: false, error: "База недоступна" });
+    if (!key) return res.status(400).json({ success: false, error: "Ключ пуст" });
 
     try {
-        const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key.trim()]);
-        if (result.rows.length === 0) return res.status(404).json({ status: "not_found", error: "Ключ не найден" });
+        const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key.trim().toUpperCase()]);
+        if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Ключ не найден" });
 
-        const license = result.rows[0]; // Исправлено на чтение первого элемента массива строк!
+        const license = result.rows[0];
 
-        if (license.status === 'banned') return res.status(403).json({ status: "banned", error: "Лицензия заблокирована" });
+        if (license.status === 'banned') return res.status(403).json({ success: false, error: "Лицензия заблокирована" });
+        
         if (license.type !== 'reset' && parseInt(license.expires_at) < Date.now()) {
-            return res.status(403).json({ status: "expired", error: "Срок действия истек" });
+            return res.status(403).json({ success: false, error: "Срок действия истек" });
         }
 
+        // Логика привязки HWID
+        if (!license.hwid) {
+            // Если HWID ещё не привязан к ключу в БД — сохраняем текущий из мода
+            await pool.query('UPDATE licenses SET hwid = $1 WHERE key = $2', [hwid, key.trim().toUpperCase()]);
+        } else if (license.hwid !== hwid) {
+            // Если HWID в БД есть, но он отличается от ПК игрока — блокируем вход
+            return res.status(403).json({ success: false, error: "Ошибка HWID (Ключ привязан к другому ПК)" });
+        }
+
+        // Обновляем информацию об активности игрока
         await pool.query(
             'UPDATE licenses SET last_seen = $1, player_name = $2, server_ip = $3 WHERE key = $4',
-            [Date.now(), playerName || '—', serverIp || '—', key.trim()]
+            [Date.now(), playerName || '—', serverIp || '—', key.trim().toUpperCase()]
         );
 
-        res.json({ status: "success" });
-    } catch (err) { res.status(500).json({ error: "Внутренняя ошибка сервера" }); }
+        // Возвращаем JSON, который ждет строка: response.contains("\"success\":true")
+        res.json({ success: true, status: "success" });
+    } catch (err) { 
+        res.status(500).json({ success: false, error: "Внутренняя ошибка сервера" }); 
+    }
 });
 
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
