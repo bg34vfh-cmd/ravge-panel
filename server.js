@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ХАК ДЛЯ VERCEL: Запускаем базу данных прямо в оперативной памяти (:memory:)
+// База данных в оперативной памяти для обхода ограничений файловой системы Vercel
 const db = new sqlite3.Database(':memory:', (err) => {
     if (err) console.error('Ошибка БД:', err.message);
     else console.log('База данных в памяти Vercel успешно запущена.');
@@ -32,11 +32,11 @@ db.serialize(() => {
         password TEXT DEFAULT NULL
     )`);
 
-    // ЗАШИВАЕМ КЛЮЧИ: При каждом старте Vercel эти ключи будут автоматически создаваться в базе!
+    // Автоматически создаваемые ключи при каждом холодном старте сервера
     const defaultKeys = [
         "6YZD-5LKM-SW3Y-MSCJ",
         "EFYB-HJYB-RNJL-0MLD",
-        "NPN7-B5WR-CEZT-KID9" // Ключ твоего первого покупателя!
+        "NPN7-B5WR-CEZT-KID9"
     ];
     
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
@@ -45,11 +45,12 @@ db.serialize(() => {
     });
 });
 
-// Роут для Vercel: чтобы главная страница не выдавала ошибку, отдаём index.html
+// Отдача главной страницы панели управления
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Верификация лицензии и привязка HWID
 app.get('/api/verify', (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -84,6 +85,7 @@ app.get('/api/verify', (req, res) => {
     });
 });
 
+// Регистрация аккаунта пользователя (логин/пароль)
 app.get('/api/register-account', (req, res) => {
     let { key, login, password } = req.query;
     if (!key || !login || !password) return res.send('{"success":false}');
@@ -99,6 +101,7 @@ app.get('/api/register-account', (req, res) => {
     });
 });
 
+// Генерация новой лицензии администратором
 app.post('/api/admin/generate-license', (req, res) => {
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
     const newKey = `${genPart()}-${genPart()}-${genPart()}-${genPart()}`;
@@ -108,11 +111,33 @@ app.post('/api/admin/generate-license', (req, res) => {
     });
 });
 
-app.post('/api/admin/delete', (req, res) => { db.run('DELETE FROM licenses WHERE id = ?', [req.body.id], (err) => { res.json({ success: !err }); }); });
-app.post('/api/admin/toggle-status', (req, res) => { const { id, currentStatus } = req.body; const nextStatus = currentStatus === 'active' ? 'banned' : 'active'; db.run('UPDATE licenses SET status = ? WHERE id = ?', [nextStatus, id], (err) => { res.json({ success: !err }); }); });
-app.get('/api/admin/keys', (req, res) => { db.all('SELECT * FROM licenses', [], (err, rows) => { res.json({ success: true, keys: rows || [] }); }); });
+// Удаление лицензии
+app.post('/api/admin/delete', (req, res) => { 
+    db.run('DELETE FROM licenses WHERE id = ?', [req.body.id], (err) => { 
+        res.json({ success: !err }); 
+    }); 
+});
 
-// Экспортируем приложение для бессерверных функций Vercel
+// Переключение статуса бана/активности
+app.post('/api/admin/toggle-status', (req, res) => { 
+    const { id, currentStatus } = req.body; 
+    const nextStatus = currentStatus === 'active' ? 'banned' : 'active'; 
+    db.run('UPDATE licenses SET status = ? WHERE id = ?', [nextStatus, id], (err) => { 
+        res.json({ success: !err }); 
+    }); 
+});
+
+// Получение списка всех ключей для веб-интерфейса панели
+app.get('/api/admin/keys', (req, res) => { 
+    db.all('SELECT * FROM licenses', [], (err, rows) => { 
+        res.json({ success: true, keys: rows || [] }); 
+    }); 
+});
+
+// Экспортируем модуль для обработки Serverless-архитектуры Vercel
 module.exports = app;
 
-app.listen(PORT, () => console.log('Сервер запущен на порту ' + PORT));
+// ФИКС ДЛЯ VERCEL: Запускаем прослушивание порта ТОЛЬКО если сервер запущен локально на ПК
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
+}
