@@ -1,6 +1,7 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,50 +9,66 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// База данных в оперативной памяти для обхода ограничений файловой системы Vercel
-const db = new sqlite3.Database(':memory:', (err) => {
-    if (err) console.error('Ошибка БД:', err.message);
-    else console.log('База данных в памяти Vercel успешно запущена.');
+// Подключение к твоей постоянной вечной базе данных Postgres на Vercel
+const pool = new Pool({
+    connectionString: process.env.POSTGRES_URL + "?sslmode=require",
 });
 
-// Инициализация структуры таблиц
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS licenses (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key TEXT UNIQUE,
-        hwid TEXT DEFAULT NULL,
-        status TEXT DEFAULT 'active',
-        expires_at INTEGER DEFAULT 0,
-        duration_ms INTEGER DEFAULT 0,
-        type TEXT DEFAULT 'license',
-        last_seen INTEGER DEFAULT 0,
-        player_name TEXT DEFAULT '—',
-        server_ip TEXT DEFAULT '—',
-        banned_until INTEGER DEFAULT 0,
-        login TEXT DEFAULT NULL,
-        password TEXT DEFAULT NULL
-    )`);
+// Инициализация структуры таблиц в облаке и миграция старых ключей
+const initDB = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS licenses (
+                id SERIAL PRIMARY KEY,
+                key TEXT UNIQUE,
+                hwid TEXT DEFAULT NULL,
+                status TEXT DEFAULT 'active',
+                expires_at BIGINT DEFAULT 0,
+                duration_ms BIGINT DEFAULT 0,
+                type TEXT DEFAULT 'license',
+                last_seen BIGINT DEFAULT 0,
+                player_name TEXT DEFAULT '—',
+                server_ip TEXT DEFAULT '—',
+                banned_until BIGINT DEFAULT 0,
+                login TEXT DEFAULT NULL,
+                password TEXT DEFAULT NULL
+            )
+        `);
+        console.log('Облачная база Postgres успешно подключена.');
 
-    // Автоматически создаваемые ключи при каждом холодном старте сервера
-    const defaultKeys = [
-        "6YZD-5LKM-SW3Y-MSCJ",
-        "EFYB-HJYB-RNJL-0MLD",
-        "NPN7-B5WR-CEZT-KID9"
-    ];
-    
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    defaultKeys.forEach(k => {
-        db.run('INSERT OR IGNORE INTO licenses (key, expires_at, duration_ms, type, status) VALUES (?, 0, ?, "license", "active")', [k, thirtyDaysMs]);
-    });
-});
+        // ПРОВЕРКА МИГРАЦИИ: Если в облаке пусто, зальем туда дефолтные ключи, чтобы покупатели не слетели
+        const checkKeys = await pool.query('SELECT id FROM licenses LIMIT 1');
+        if (checkKeys.rows.length === 0) {
+            console.log('Облако пустое. Переносим ключи покупателей...');
+            
+            // Твои основные рабочие ключи покупателей, которые были в keys.db
+            const backupKeys = [
+                "6YZD-5LKM-SW3Y-MSCJ",
+                "EFYB-HJYB-RNJL-0MLD",
+                "NPN7-B5WR-CEZT-KID9"
+            ];
+            
+            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+            for (const k of backupKeys) {
+                await pool.query(
+                    'INSERT INTO licenses (key, expires_at, duration_ms, type, status) VALUES ($1, 0, $2, \'license\', \'active\') ON CONFLICT (key) DO NOTHING',
+                    [k, thirtyDaysMs]
+                );
+            }
+            console.log('Все ключи успешно перенесены в вечное облако!');
+        }
+    } catch (err) {
+        console.error('Ошибка БД:', err.message);
+    }
+};
+initDB();
 
-// Отдача главной страницы панели управления
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Верификация лицензии и привязка HWID
-app.get('/api/verify', (req, res) => {
+// Верификация лицензии и привязка HWID для чита
+app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
     key = key.trim().toUpperCase();
@@ -59,85 +76,106 @@ app.get('/api/verify', (req, res) => {
     const pName = name ? decodeURIComponent(name) : '—';
     const sIp = server ? decodeURIComponent(server) : '—';
 
-    db.get('SELECT * FROM licenses WHERE key = ?', [key], (err, row) => {
-        if (err || !row) return res.send('{"success":false}');
-        if (row.banned_until && row.banned_until > Date.now()) return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
+    try {
+        const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
+        const row = result.rows[0];
+
+        if (!row) return res.send('{"success":false}');
+        if (row.banned_until && Number(row.banned_until) > Date.now()) {
+            return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
+        }
         if (row.status !== 'active') return res.send('{"success":false}');
 
-        let finalExpiresAt = row.expires_at;
+        let finalExpiresAt = Number(row.expires_at);
 
-        if (row.type === 'license' && row.expires_at === 0) {
-            finalExpiresAt = Date.now() + row.duration_ms;
-            db.run('UPDATE licenses SET expires_at = ? WHERE key = ?', [finalExpiresAt, key]);
+        if (row.type === 'license' && finalExpiresAt === 0) {
+            finalExpiresAt = Date.now() + Number(row.duration_ms);
+            await pool.query('UPDATE licenses SET expires_at = $1 WHERE key = $2', [finalExpiresAt, key]);
         }
 
         if (finalExpiresAt !== 0 && Date.now() > finalExpiresAt) return res.send('{"success":false}');
         if (!row.login || !row.password) return res.send('{"success":true,"need_register":true}');
 
-        db.run('UPDATE licenses SET last_seen = ?, player_name = ?, server_ip = ? WHERE key = ?', [Date.now(), pName, sIp, key]);
+        await pool.query('UPDATE licenses SET last_seen = $1, player_name = $2, server_ip = $3 WHERE key = $4', [Date.now(), pName, sIp, key]);
 
         if (!row.hwid) {
-            db.run('UPDATE licenses SET hwid = ? WHERE key = ?', [hwid, key], () => { return res.send('{"success":true}'); });
+            await pool.query('UPDATE licenses SET hwid = $1 WHERE key = $2', [hwid, key]);
+            return res.send('{"success":true}');
         } else {
             if (row.hwid.trim().toUpperCase() === hwid) return res.send('{"success":true}');
             else return res.send('{"success":false}');
         }
-    });
+    } catch (err) {
+        return res.send('{"success":false}');
+    }
 });
 
 // Регистрация аккаунта пользователя (логин/пароль)
-app.get('/api/register-account', (req, res) => {
+app.get('/api/register-account', async (req, res) => {
     let { key, login, password } = req.query;
     if (!key || !login || !password) return res.send('{"success":false}');
     key = key.trim().toUpperCase();
     const userLogin = decodeURIComponent(login).trim();
     const userPass = decodeURIComponent(password).trim();
 
-    db.get('SELECT id FROM licenses WHERE login = ?', [userLogin], (err, row) => {
-        if (row) return res.send('{"success":false,"message":"Username already taken"}');
-        db.run('UPDATE licenses SET login = ?, password = ? WHERE key = ?', [userLogin, userPass, key], () => {
-            return res.send('{"success":true}');
-        });
-    });
+    try {
+        const checkUser = await pool.query('SELECT id FROM licenses WHERE login = $1', [userLogin]);
+        if (checkUser.rows.length > 0) return res.send('{"success":false,"message":"Username already taken"}');
+
+        await pool.query('UPDATE licenses SET login = $1, password = $2 WHERE key = $3', [userLogin, userPass, key]);
+        return res.send('{"success":true}');
+    } catch (err) {
+        return res.send('{"success":false}');
+    }
 });
 
-// Генерация новой лицензии администратором
-app.post('/api/admin/generate-license', (req, res) => {
+// Генерация новой лицензии администратором в панели
+app.post('/api/admin/generate-license', async (req, res) => {
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
     const newKey = `${genPart()}-${genPart()}-${genPart()}-${genPart()}`;
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-    db.run('INSERT INTO licenses (key, expires_at, duration_ms, type, status) VALUES (?, 0, ?, "license", "active")', [newKey, thirtyDaysMs], (err) => {
-        res.json({ success: !err });
-    });
+    try {
+        await pool.query('INSERT INTO licenses (key, expires_at, duration_ms, type, status) VALUES ($1, 0, $2, \'license\', \'active\')', [newKey, thirtyDaysMs]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
 });
 
-// Удаление лицензии
-app.post('/api/admin/delete', (req, res) => { 
-    db.run('DELETE FROM licenses WHERE id = ?', [req.body.id], (err) => { 
-        res.json({ success: !err }); 
-    }); 
+// Удаление лицензии из веб-интерфейса
+app.post('/api/admin/delete', async (req, res) => { 
+    try {
+        await pool.query('DELETE FROM licenses WHERE id = $1', [req.body.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
 });
 
-// Переключение статуса бана/активности
-app.post('/api/admin/toggle-status', (req, res) => { 
+// Блокировка / Разблокировка ключа
+app.post('/api/admin/toggle-status', async (req, res) => { 
     const { id, currentStatus } = req.body; 
     const nextStatus = currentStatus === 'active' ? 'banned' : 'active'; 
-    db.run('UPDATE licenses SET status = ? WHERE id = ?', [nextStatus, id], (err) => { 
-        res.json({ success: !err }); 
-    }); 
+    try {
+        await pool.query('UPDATE licenses SET status = $1 WHERE id = $2', [nextStatus, id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
 });
 
-// Получение списка всех ключей для веб-интерфейса панели
-app.get('/api/admin/keys', (req, res) => { 
-    db.all('SELECT * FROM licenses', [], (err, rows) => { 
-        res.json({ success: true, keys: rows || [] }); 
-    }); 
+// Получение списка всех ключей для отображения в панели управления
+app.get('/api/admin/keys', async (req, res) => { 
+    try {
+        const result = await pool.query('SELECT * FROM licenses ORDER BY id ASC');
+        res.json({ success: true, keys: result.rows || [] });
+    } catch (err) {
+        res.json({ success: false, keys: [] });
+    }
 });
 
-// Экспортируем модуль для обработки Serverless-архитектуры Vercel
 module.exports = app;
 
-// ФИКС ДЛЯ VERCEL: Запускаем прослушивание порта ТОЛЬКО если сервер запущен локально на ПК
 if (!process.env.VERCEL) {
-    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
+    app.listen(PORT, () => console.log('Локальный сервер запущен на порту ' + PORT));
 }
