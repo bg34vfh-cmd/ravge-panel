@@ -65,27 +65,23 @@ app.get('/api/admin/keys', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
+// УНИВЕРСАЛЬНАЯ ГЕНЕРАЦИЯ: Принимает Логин, Пароль и Тип из интерфейса
 app.post('/api/admin/generate-license', async (req, res) => {
     if (!pool) return res.status(500).json({ success: false });
-    const { timeInput } = req.body;
+    let { timeInput, login, password, keyType } = req.body;
+    
+    const key = (keyType === 'reset' ? 'RESET-' : '') + generateRandomKey();
     const duration = parseTimeInput(timeInput || "30d");
-    const key = generateRandomKey();
     const expiresAt = Date.now() + duration;
-    const randomUser = 'User_' + Math.floor(1000 + Math.random() * 9000);
+    
+    const finalLogin = login && login.trim() ? login.trim() : 'User_' + Math.floor(1000 + Math.random() * 9000);
+    const finalPassword = password && password.trim() ? password.trim() : null;
+
     try {
         await pool.query(
-            `INSERT INTO licenses (key, expires_at, duration_ms, type, login, status) VALUES ($1, $2, $3, 'license', $4, 'active')`,
-            [key, expiresAt, duration, randomUser]
+            `INSERT INTO licenses (key, expires_at, duration_ms, type, login, password, status) VALUES ($1, $2, $3, $4, $5, $6, 'active')`,
+            [key, expiresAt, duration, keyType || 'license', finalLogin, finalPassword]
         );
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
-});
-
-app.post('/api/admin/generate-reset', async (req, res) => {
-    if (!pool) return res.status(500).json({ success: false });
-    const key = "RESET-" + generateRandomKey();
-    try {
-        await pool.query(`INSERT INTO licenses (key, type, status) VALUES ($1, 'reset', 'active')`, [key]);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
