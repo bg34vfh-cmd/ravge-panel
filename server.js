@@ -14,7 +14,6 @@ const pool = connectionString
     : null;
 
 let isDbInitialized = false;
-
 const initDB = async () => {
     if (isDbInitialized || !pool) return;
     try {
@@ -36,15 +35,10 @@ const initDB = async () => {
             )
         `);
         isDbInitialized = true;
-    } catch (err) {
-        console.error('Ошибка инициализации БД:', err);
-    }
+    } catch (err) { console.error('Ошибка инициализации БД:', err); }
 };
 
-app.use(async (req, res, next) => {
-    await initDB();
-    next();
-});
+app.use(async (req, res, next) => { await initDB(); next(); });
 
 function parseTimeInput(input) {
     const match = input.match(/^(\d+)([dmh])$/);
@@ -63,15 +57,13 @@ function generateRandomKey() {
     return `${gen()}-${gen()}-${gen()}-${gen()}`;
 }
 
-// API: Получить все ключи
+// API: Все ключи
 app.get('/api/admin/keys', async (req, res) => {
     if (!pool) return res.status(500).json({ success: false });
     try {
         const result = await pool.query('SELECT * FROM licenses ORDER BY id DESC');
         res.json({ success: true, keys: result.rows });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 // API: Создать обычную лицензию
@@ -81,56 +73,67 @@ app.post('/api/admin/generate-license', async (req, res) => {
     const duration = parseTimeInput(timeInput || "30d");
     const key = generateRandomKey();
     const expiresAt = Date.now() + duration;
-
     try {
         await pool.query(
             `INSERT INTO licenses (key, expires_at, duration_ms, type, login) VALUES ($1, $2, $3, 'license', $4)`,
             [key, expiresAt, duration, 'User_' + Math.floor(1000 + Math.random() * 9000)]
         );
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// API: Создать ключ сброса HWID
+// API: Создать ключ сброса
 app.post('/api/admin/generate-reset', async (req, res) => {
     if (!pool) return res.status(500).json({ success: false });
     const key = "RESET-" + generateRandomKey();
     try {
         await pool.query(`INSERT INTO licenses (key, type, status) VALUES ($1, 'reset', 'active')`, [key]);
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// API: Действия над ключами
+// API: Действия (Сброс HWID, Бан, Разбан, Удаление)
 app.post('/api/admin/action', async (req, res) => {
     if (!pool) return res.status(500).json({ success: false });
     const { action, id } = req.body;
     try {
-        if (action === 'reset') {
-            await pool.query("UPDATE licenses SET hwid = NULL WHERE id = $1", [id]);
-        } else if (action === 'ban') {
-            await pool.query("UPDATE licenses SET status = 'banned' WHERE id = $1", [id]);
-        } else if (action === 'unban') {
-            await pool.query("UPDATE licenses SET status = 'active', banned_until = 0 WHERE id = $1", [id]);
-        } else if (action === 'delete') {
-            await pool.query("DELETE FROM licenses WHERE id = $1", [id]);
-        }
+        if (action === 'reset') await pool.query("UPDATE licenses SET hwid = NULL WHERE id = $1", [id]);
+        else if (action === 'banned') await pool.query("UPDATE licenses SET status = 'banned' WHERE id = $1", [id]);
+        else if (action === 'unban') await pool.query("UPDATE licenses SET status = 'active' WHERE id = $1", [id]);
+        else if (action === 'delete') await pool.query("DELETE FROM licenses WHERE id = $1", [id]);
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// ГЕЙТВЕЙ КЛИЕНТА: Проверка лицензии из игры Майнкрафт
+app.post('/api/check-license', async (req, res) => {
+    const { key, playerName, serverIp } = req.body;
+    if (!pool) return res.status(500).json({ error: "База недоступна" });
+    if (!key) return res.status(400).json({ error: "Ключ пуст" });
+
+    try {
+        const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
+        if (result.rows.length === 0) return res.status(404).json({ status: "not_found" });
+
+        const license = result.rows[0];
+
+        if (license.status === 'banned') return res.status(403).json({ status: "banned" });
+        if (license.type !== 'reset' && parseInt(license.expires_at) < Date.now()) {
+            return res.status(403).json({ status: "expired" });
+        }
+
+        await pool.query(
+            'UPDATE licenses SET last_seen = $1, player_name = $2, server_ip = $3 WHERE key = $4',
+            [Date.now(), playerName || '—', serverIp || '—', key]
+        );
+
+        res.json({ status: "success" });
+    } catch (err) { res.status(500).json({ error: "Внутренняя ошибка сервера" }); }
 });
 
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 module.exports = app;
 
 if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
+    app.listen(PORT, () => console.log(`Локальный запуск: порт ${PORT}`));
 }
