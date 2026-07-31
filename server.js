@@ -5,9 +5,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Настройка middleware
+// Настройка middleware и раздачи статики (из папки public в корне)
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Автоматический сбор системных переменных баз данных от Vercel
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
@@ -49,13 +49,13 @@ const initDB = async () => {
         if (checkKeys.rows.length === 0) {
             console.log('Облако пустое. Переносим ключи покупателей...');
             
-            // Список ваших ключей (добавьте сюда все нужные ключи)
+            // Список ваших ключей
             const backupKeys = [
                 "6YZD-5LKM-SW3Y-MSCJ",
-                "E000-0000-0000-0000" // Исправлен оборванный ключ из вашего примера
+                "E000-0000-0000-0000" // Исправлен оборванный ключ из первоначального кода
             ];
 
-            // Безопасный импорт через цикл, предотвращающий дублирование (ON CONFLICT)
+            // Безопасный импорт через цикл с предотвращением дублирования (ON CONFLICT)
             for (const key of backupKeys) {
                 await pool.query(
                     'INSERT INTO licenses (key) VALUES ($1) ON CONFLICT (key) DO NOTHING',
@@ -80,7 +80,7 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Пример роута для проверки лицензии (для теста)
+// Роут для проверки лицензии
 app.post('/api/check-license', async (req, res) => {
     const { key } = req.body;
     if (!pool) return res.status(500).json({ error: "База данных недоступна" });
@@ -91,16 +91,16 @@ app.post('/api/check-license', async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ status: "not_found" });
         }
-        res.json({ status: "success", license: result.rows[0] });
+        res.json({ status: "success", license: result.rows });
     } catch (err) {
         res.status(500).json({ error: "Ошибка сервера при проверке" });
     }
 });
 
-// Экспорт для Vercel Serverless environment
+// Экспорт для серверлесс среды Vercel
 module.exports = app;
 
-// Локальный запуск (если скрипт запускается не в Vercel, а через node index.js)
+// Локальный запуск (если проект тестируется локально на ПК)
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`Локальный сервер запущен на порту ${PORT}`);
