@@ -8,26 +8,21 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Сбор системных переменных баз данных от Vercel
+// Автоматический сбор всех вариантов системных переменных баз от Vercel
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
 
-// Инициализация пула
-const pool = connectionString 
-    ? new Pool({ connectionString: connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require" })
-    : null;
+const pool = new Pool({
+    connectionString: connectionString ? (connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require") : undefined
+});
 
-// Флаг, чтобы не проверять базу данных при каждом запросе
-let isDbInitialized = false;
-
-// Безопасная функция инициализации структуры таблиц
+// Инициализация структуры таблиц в облаке Neon
 const initDB = async () => {
-    if (isDbInitialized) return;
-    if (!pool) {
-        console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменные базы данных не найдены в Vercel!");
-        return;
-    }
-
     try {
+        if (!connectionString) {
+            console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменные базы данных не найдены в Vercel!");
+            return;
+        }
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id SERIAL PRIMARY KEY,
@@ -45,77 +40,154 @@ const initDB = async () => {
                 password TEXT DEFAULT NULL
             )
         `);
+        console.log('Облачная база Postgres успешно подключена.');
 
-        // Проверка миграции ключей покупателей
+        // Проверка миграции: если в облаке пусто, заливаем твои ключи покупателей
         const checkKeys = await pool.query('SELECT id FROM licenses LIMIT 1');
         if (checkKeys.rows.length === 0) {
+            console.log('Облако пустое. Переносим ключи покупателей...');
+            
             const backupKeys = [
                 "6YZD-5LKM-SW3Y-MSCJ",
-                "E000-0000-0000-0000"
+                "EFYB-HJYB-RNJL-0MLD",
+                "NPN7-B5WR-CEZT-KID9"
             ];
-
-            for (const key of backupKeys) {
+            
+            const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+            for (const k of backupKeys) {
                 await pool.query(
-                    'INSERT INTO licenses (key) VALUES ($1) ON CONFLICT (key) DO NOTHING',
-                    [key]
+                    'INSERT INTO licenses (key, expires_at, duration_ms, type, status) VALUES ($1, 0, $2, \'license\', \'active\') ON CONFLICT (key) DO NOTHING',
+                    [k, thirtyDaysMs]
                 );
             }
+            console.log('Все ключи успешно перенесены в вечное облако!');
         }
-        isDbInitialized = true;
     } catch (err) {
-        console.error('Ошибка в процессе работы с базой данных:', err);
+        console.error('Ошибка инициализации базы данных:', err.message);
     }
 };
+initDB();
 
-// Middleware: Инициализируем базу данных при первом запросе к серверу
-app.use(async (req, res, next) => {
-    try {
-        await initDB();
-    } catch (e) {
-        console.error("Не удалось инициализировать БД:", e);
-    }
-    next();
-});
+// Фикс запросов иконок от браузера (чтобы они не ломали роутинг Express)
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/favicon.png', (req, res) => res.status(204).end());
 
-// Главная страница панели (отдает index.html из папки public)
+// Главная страница админ-панели
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
-        if (err) {
-            res.status(500).send("Файл index.html не найден в папке public");
-        }
-    });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Базовый эндпоинт для проверки работоспособности
-app.get('/api/status', (req, res) => {
-    res.json({ 
-        status: "online", 
-        database_connected: !!pool,
-        database_initialized: isDbInitialized
-    });
-});
-
-// Роут для проверки лицензии
-app.post('/api/check-license', async (req, res) => {
-    const { key } = req.body;
-    if (!pool) return res.status(500).json({ error: "База данных недоступна" });
-    if (!key) return res.status(400).json({ error: "Ключ не указан" });
+// Верификация лицензии и привязка HWID для чита
+app.get('/api/verify', async (req, res) => {
+    let { key, hwid, name, server } = req.query;
+    if (!key || !hwid) return res.send('{"success":false}');
+    key = key.trim().toUpperCase();
+    hwid = hwid.trim().toUpperCase();
+    const pName = name ? decodeURIComponent(name) : '—';
+    const sIp = server ? decodeURIComponent(server) : '—';
 
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ status: "not_found" });
+        
+        // ЖЕСТКИЙ ФИКС: Берем именно ПЕРВЫЙ элемент массива, чтобы скрипт не падал в 500!
+        if (result.rows.length === 0) return res.send('{"success":false}');
+        const row = result.rows[0]; 
+
+        if (row.banned_until && Number(row.banned_until) > Date.now()) {
+            return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
         }
-        res.json({ status: "success", license: result.rows });
+        if (row.status !== 'active') return res.send('{"success":false}');
+
+        let finalExpiresAt = Number(row.expires_at);
+
+        if (row.type === 'license' && finalExpiresAt === 0) {
+            finalExpiresAt = Date.now() + Number(row.duration_ms);
+            await pool.query('UPDATE licenses SET expires_at = $1 WHERE key = $2', [finalExpiresAt, key]);
+        }
+
+        if (finalExpiresAt !== 0 && Date.now() > finalExpiresAt) return res.send('{"success":false}');
+        if (!row.login || !row.password) return res.send('{"success":true,"need_register":true}');
+
+        await pool.query('UPDATE licenses SET last_seen = $1, player_name = $2, server_ip = $3 WHERE key = $4', [Date.now(), pName, sIp, key]);
+
+        if (!row.hwid) {
+            await pool.query('UPDATE licenses SET hwid = $1 WHERE key = $2', [hwid, key]);
+            return res.send('{"success":true}');
+        } else {
+            if (row.hwid.trim().toUpperCase() === hwid) return res.send('{"success":true}');
+            else return res.send('{"success":false}');
+        }
     } catch (err) {
-        res.status(500).json({ error: "Ошибка сервера при проверке" });
+        return res.send('{"success":false}');
+    }
+});
+
+// Регистрация аккаунта пользователя (логин/пароль)
+app.get('/api/register-account', async (req, res) => {
+    let { key, login, password } = req.query;
+    if (!key || !login || !password) return res.send('{"success":false}');
+    key = key.trim().toUpperCase();
+    const userLogin = decodeURIComponent(login).trim();
+    const userPass = decodeURIComponent(password).trim();
+
+    try {
+        const checkUser = await pool.query('SELECT id FROM licenses WHERE login = $1', [userLogin]);
+        if (checkUser.rows.length > 0) return res.send('{"success":false,"message":"Username already taken"}');
+
+        await pool.query('UPDATE licenses SET login = $1, password = $2 WHERE key = $3', [userLogin, userPass, key]);
+        return res.send('{"success":true}');
+    } catch (err) {
+        return res.send('{"success":false}');
+    }
+});
+
+// Генерация новой лицензии администратором в панели
+app.post('/api/admin/generate-license', async (req, res) => {
+    const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+    const newKey = `${genPart()}-${genPart()}-${genPart()}-${genPart()}`;
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    try {
+        await pool.query('INSERT INTO licenses (key, expires_at, duration_ms, type, status) VALUES ($1, 0, $2, \'license\', \'active\')', [newKey, thirtyDaysMs]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
+});
+
+// Удаление лицензии из веб-интерфейса
+app.post('/api/admin/delete', async (req, res) => { 
+    try {
+        await pool.query('DELETE FROM licenses WHERE id = $1', [req.body.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
+});
+
+// Блокировка / Разблокировка ключа
+app.post('/api/admin/toggle-status', async (req, res) => { 
+    const { id, currentStatus } = req.body; 
+    const nextStatus = currentStatus === 'active' ? 'banned' : 'active'; 
+    try {
+        await pool.query('UPDATE licenses SET status = $1 WHERE id = $2', [nextStatus, id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false });
+    }
+});
+
+// Получение списка всех ключей для отображения в панели управления
+app.get('/api/admin/keys', async (req, res) => { 
+    try {
+        const result = await pool.query('SELECT * FROM licenses ORDER BY id ASC');
+        res.json({ success: true, keys: result.rows || [] });
+    } catch (err) {
+        res.json({ success: false, keys: [] });
     }
 });
 
 module.exports = app;
 
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`Локальный сервер запущен на порту ${PORT}`);
-    });
+if (!process.env.VERCEL) {
+    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
 }
