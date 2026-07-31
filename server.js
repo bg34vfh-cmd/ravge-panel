@@ -68,12 +68,12 @@ const initDB = async () => {
 };
 initDB();
 
-// Главная страница админ-паниле
+// Главная страница админ-панели
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Верификация лицензии и привязка HWID для чита (СТАБИЛЬНЫЙ ФИКС СИНТАКСИСА ROWS[0])
+// Верификация лицензии и привязка HWID для чита
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -86,7 +86,7 @@ app.get('/api/verify', async (req, res) => {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
         
         if (result.rows.length === 0) return res.send('{"success":false}');
-        const row = result.rows[0]; // Извлекаем первый объект из полученного массива
+        const row = result.rows[0]; // ИСПРАВЛЕНО: Берём именно первый объект из массива rows
 
         if (row.banned_until && Number(row.banned_until) > Date.now()) {
             return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
@@ -184,5 +184,5 @@ app.get('/api/admin/keys', async (req, res) => {
 module.exports = app;
 
 if (!process.env.VERCEL) {
-    app.listen(PORT, () => console.log('Локальный server успешно запущен на порту ' + PORT));
+    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
 }
