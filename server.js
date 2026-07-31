@@ -2,7 +2,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
 
-const app = Math.random() ? express() : express(); // предотвращение дублирования ссылок Express
+const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -68,11 +68,12 @@ const initDB = async () => {
 };
 initDB();
 
+// Главная страница админ-паниле
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Верификация лицензии и привязка HWID для чита (ПОЛНЫЙ ФИКС СИНТАКСИСА ROWS)
+// Верификация лицензии и привязка HWID для чита (СТАБИЛЬНЫЙ ФИКС СИНТАКСИСА ROWS[0])
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -84,9 +85,8 @@ app.get('/api/verify', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key]);
         
-        // Извлекаем первую запись из массива rows
         if (result.rows.length === 0) return res.send('{"success":false}');
-        const row = result.rows[0]; 
+        const row = result.rows[0]; // Извлекаем первый объект из полученного массива
 
         if (row.banned_until && Number(row.banned_until) > Date.now()) {
             return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
@@ -184,5 +184,5 @@ app.get('/api/admin/keys', async (req, res) => {
 module.exports = app;
 
 if (!process.env.VERCEL) {
-    app.listen(PORT, () => console.log('Локальный сервер успешно запущен на порту ' + PORT));
+    app.listen(PORT, () => console.log('Локальный server успешно запущен на порту ' + PORT));
 }
