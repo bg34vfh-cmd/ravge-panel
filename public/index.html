@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8"><title>Guard Premium Panel</title>
+    <style>
+        body{font-family:'Segoe UI',sans-serif;background:#0b0b0e;color:#e4e4e7;margin:30px;}
+        .container{max-width:1250px;margin:0 auto;background:#121217;padding:25px;border-radius:12px;border:1px solid #27272a;box-shadow:0 10px 30px rgba(0,0,0,0.6);}
+        h1{font-size:24px;font-weight:800;color:#fff;margin:0 0 20px 0;}h1 span{color:#a855f7;text-shadow:0 0 15px rgba(168,85,247,0.3);}
+        .controls{display:flex;gap:10px;align-items:center;margin-bottom:15px;background:#181820;padding:15px;border-radius:8px;border:1px solid #27272a;flex-wrap:wrap;}
+        select,input{background:#0b0b0e;color:#fff;border:1px solid #3f3f46;padding:10px;border-radius:6px;font-size:14px;outline:none;}
+        button{background:#a855f7;color:#fff;border:none;padding:10px 16px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:700;}
+        button:hover{background:#c084fc;} .btn-reset-gen{background:#3b82f6;} .btn-reset-gen:hover{background:#60a5fa;}
+        .btn-timeout{background:#eab308;color:#000;} .btn-timeout:hover{background:#facc15;}
+        .btn-extend{background:#10b981;} .btn-extend:hover{background:#34d399;}
+        .btn-ban{background:#ef4444;} .btn-ban:hover{background:#f87171;}
+        .btn-unban{background:#22c55e;} .btn-unban:hover{background:#4ade80;}
+        .btn-del{background:#3f3f46;} .btn-del:hover{background:#52525b;}
+        .btn-copy{background:#27272a;border:1px solid #3f3f46;color:#a1a1aa;padding:4px 8px;font-size:11px;border-radius:4px;cursor:pointer;margin-left:8px;font-weight:bold;}
+        table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{padding:12px;border-bottom:1px solid #27272a;text-align:left;font-size:13px;}
+        th{background:#181820;color:#a1a1aa;font-weight:600;text-transform:uppercase;font-size:11px;}tr:hover{background:#14141c;}
+        .badge{padding:3px 6px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;}
+        .badge-active{background:rgba(34,197,94,0.1);color:#4ade80;} .badge-banned{background:rgba(239,68,68,0.1);color:#f87171;}
+        .badge-timeout{background:rgba(234,179,8,0.1);color:#facc15;} .badge-type-reset{background:rgba(59,130,246,0.1);color:#60a5fa;}
+        .online-dot{display:inline-flex;align-items:center;gap:5px;font-weight:700;}
+        .dot{width:7px;height:7px;border-radius:50%;display:inline-block;} .dot-online{background:#22c55e;box-shadow:0 0 8px #22c55e;} .dot-offline{background:#71717a;}
+        #logConsole{background:#0b0b0e;border:1px solid #3f3f46;padding:12px;border-radius:6px;font-family:monospace;font-size:12px;color:#a1a1aa;margin-bottom:20px;max-height:80px;overflow-y:auto;}
+        #authScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:#0b0b0e;display:flex;justify-content:center;align-items:center;z-index:9999;}
+        .auth-box{background:#121217;padding:30px;border-radius:12px;border:1px solid #27272a;text-align:center;}
+    </style>
+</head>
+<body>
+    <div id="authScreen"><div class="auth-box"><h2>Вход в Guard Panel</h2><input type="password" id="adminPassword" placeholder="Пароль..." style="width:200px; margin-bottom:15px;"><br><button onclick="checkAuth()">Войти</button><p id="authErr" style="color:#ef4444; font-size:12px; margin-top:10px; display:none;">Неверный пароль!</p></div></div>
+    <div class="container" id="mainPanel" style="display:none;">
+        <h1><span>Guard</span> Лицензионный Центр</h1>
+        <div class="controls">
+            <select id="daysSelect" onchange="document.getElementById('customInput').style.display=this.value==='custom'?'inline-block':'none'">
+                <option value="7d">7 Дней</option><option value="15d">15 Дней</option><option value="30d" selected>30 Дней</option><option value="1h">1 Час</option><option value="15m">15 Минут</option><option value="1m">1 Минута</option><option value="custom">Свой формат...</option>
+            </select>
+            <input type="text" id="customInput" placeholder="Пример: 10m" style="display:none;width:120px;">
+            <button onclick="genLic()">Создать Ключ</button><button class="btn-reset-gen" onclick="send('/api/admin/generate-reset',{})">Ключ Сброса HWID</button>
+            <input type="text" id="searchInput" oninput="loadKeys()" placeholder="🔍 Поиск покупателя..." style="margin-left:auto; width:250px;">
+        </div>
+        <div id="logConsole">Ожидание команд...</div>
+        <table>
+            <thead><tr><th>ID</th><th>Сеть</th><th>Логин</th><th>Игрок</th><th>Сервер</th><th>Ключ</th><th>Время</th><th>Статус</th><th style="text-align:right;">Действия</th></tr></thead>
+            <tbody id="keysTable"></tbody>
+        </table>
+    </div>
+    <script>
+        const logger = document.getElementById('logConsole');
+        function log(m, c='#a1a1aa') { logger.innerHTML = `<span style="color:${c}">${m}</span>`; }
+        function checkAuth() {
+            if (document.getElementById('adminPassword').value === 'coco2012coco!') {
+                document.getElementById('authScreen').style.display = 'none'; document.getElementById('mainPanel').style.display = 'block'; loadKeys(); setInterval(loadKeys, 2000);
+            } else document.getElementById('authErr').style.display = 'block';
+        }
+        function genLic() {
+            let v = document.getElementById('daysSelect').value; if(v === 'custom') v = document.getElementById('customInput').value.trim();
+            send('/api/admin/generate-license', { timeInput: v });
+        }
+        function cp(t, b) { navigator.clipboard.writeText(t).then(() => { const ot = b.innerText; b.innerText = "Скопировано!"; setTimeout(() => b.innerText = ot, 1000); }); }
+        async function send(u,d){
+            try {
+                const r = await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+                if (r.ok) log("Операция успешно обработана базой SQLite!", "#22c55e"); loadKeys();
+            } catch (e) { log(`Ошибка: ${e.message}`, "#ef4444"); }
+        }
+        function loadKeys(){
+            if (document.getElementById('mainPanel').style.display === 'none') return;
+            const filter = document.getElementById('searchInput').value.trim().toLowerCase();
+            fetch('/api/admin/keys').then(r=>r.json()).then(d=>{
+                const tbody=document.getElementById('keysTable'); tbody.innerHTML='';
+                if(d.success) d.keys.forEach(k=>{
+                    const userLogin = k.login || '—'; if (filter && !userLogin.toLowerCase().includes(filter)) return;
+                    const isB=k.status==='banned', isR=k.type==='reset', isO=(Date.now()-k.last_seen)<20000&&(!k.banned_until||k.banned_until<Date.now());
+                    let tLeft='<span style="color:#ef4444;font-weight:700;">Истёк</span>', badge=`<span class="badge badge-active">active</span>`;
+                    if(isR) tLeft='<span style="color:#60a5fa;">Одноразовый</span>';
+                    else if(k.expires_at>Date.now()){
+                        const df=k.expires_at-Date.now(), dd=Math.floor(df/86400000), hh=Math.floor((df%86400000)/3600000), mm=Math.floor((df%3600000)/60000);
+                        tLeft=dd>0?`<span style="color:#22c55e;">${dd}д. ${hh}ч.</span>`:hh>0?`<span style="color:#3b82f6;">${hh}ч. ${mm}м.</span>`:`<span style="color:#eab308;font-weight:700;">${mm} мин.</span>`;
+                    }
+                    if(isB) badge='<span class="badge badge-banned">ban</span>';
+                    else if(k.banned_until&&k.banned_until>Date.now()) badge=`<span class="badge badge-timeout">Таймаут (${Math.ceil((k.banned_until-Date.now())/60000)}м.)</span>`;
+                    tbody.innerHTML+=`<tr><td>${k.id}</td><td>${isR||!k.hwid?'—':`<div class="online-dot"><span class="dot ${isO?'dot-online':'dot-offline'}"></span><span>${isO?'ON':'OFF'}</span></div>`}</td>
+                        <td style="font-weight:700; color:#a855f7;">${userLogin}</td><td>${isR?'—':k.player_name}</td><td style="color:#3b82f6;">${isR?'—':(isO?k.server_ip:'—')}</td>
+                        <td style="font-family:monospace;font-weight:700;color:${isR?'#60a5fa':'#a855f7'};font-size:14px;">${k.key}<button class="btn-copy" onclick="cp('${k.key}', this)">📋</button></td>
+                        <td>${tLeft}</td><td><span class="badge ${isR?'badge-type-reset':''}">${isR?'reset':badge}</span></td>
+                        <td style="text-align:right;display:flex;gap:5px;justify-content:flex-end;">
+                            ${isR?'':`<button class="btn-timeout" onclick="let t=prompt('Время:','15m');if(t)send('/api/admin/timeout',{id:${k.id},timeInput:t.trim()})">Время</button><button class="btn-extend" onclick="let t=prompt('Продлить:','30d');if(t)send('/api/admin/extend',{id:${k.id},timeInput:t.trim()})">Продлить</button>`}
+                            <button class="${isB?'btn-unban':'btn-ban'}" onclick="send('/api/admin/toggle-status',{id:${k.id},currentStatus:'${k.status}'})">${isB?'Разбанить':'Бан'}</button><button class="btn-del" onclick="if(confirm('Удалить?'))send('/api/admin/delete',{id:${k.id}})">Х</button></td></tr>`;
+                });
+            });
+        }
+    </script>
+</body>
+</html>
