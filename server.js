@@ -5,22 +5,25 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Настройка middleware и раздачи статики (из папки public в корне)
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Автоматический сбор системных переменных баз данных от Vercel
+// Сбор системных переменных баз данных от Vercel
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
 
-// Инициализация пула только при наличии строки подключения, чтобы избежать фатального сбоя
+// Инициализация пула
 const pool = connectionString 
     ? new Pool({ connectionString: connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require" })
     : null;
 
-// Инициализация структуры таблиц в облаке Neon
+// Флаг, чтобы не проверять базу данных при каждом запросе
+let isDbInitialized = false;
+
+// Безопасная функция инициализации структуры таблиц
 const initDB = async () => {
+    if (isDbInitialized) return;
     if (!pool) {
-        console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменные базы данных не найдены в Vercel! Проверьте Environment Variables.");
+        console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменные базы данных не найдены в Vercel!");
         return;
     }
 
@@ -42,41 +45,53 @@ const initDB = async () => {
                 password TEXT DEFAULT NULL
             )
         `);
-        console.log('Облачная база Postgres успешно подключена и структура проверена.');
 
-        // Проверка миграции: если в облаке пусто, заливаем ключи покупателей
+        // Проверка миграции ключей покупателей
         const checkKeys = await pool.query('SELECT id FROM licenses LIMIT 1');
         if (checkKeys.rows.length === 0) {
-            console.log('Облако пустое. Переносим ключи покупателей...');
-            
-            // Список ваших ключей
             const backupKeys = [
                 "6YZD-5LKM-SW3Y-MSCJ",
-                "E000-0000-0000-0000" // Исправлен оборванный ключ из первоначального кода
+                "E000-0000-0000-0000"
             ];
 
-            // Безопасный импорт через цикл с предотвращением дублирования (ON CONFLICT)
             for (const key of backupKeys) {
                 await pool.query(
                     'INSERT INTO licenses (key) VALUES ($1) ON CONFLICT (key) DO NOTHING',
                     [key]
                 );
             }
-            console.log('Миграция резервных ключей успешно завершена.');
         }
+        isDbInitialized = true;
     } catch (err) {
         console.error('Ошибка в процессе работы с базой данных:', err);
     }
 };
 
-// Запуск инициализации БД
-initDB();
+// Middleware: Инициализируем базу данных при первом запросе к серверу
+app.use(async (req, res, next) => {
+    try {
+        await initDB();
+    } catch (e) {
+        console.error("Не удалось инициализировать БД:", e);
+    }
+    next();
+});
 
-// Базовые эндпоинты для проверки работоспособности панели
+// Главная страница панели (отдает index.html из папки public)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+        if (err) {
+            res.status(500).send("Файл index.html не найден в папке public");
+        }
+    });
+});
+
+// Базовый эндпоинт для проверки работоспособности
 app.get('/api/status', (req, res) => {
     res.json({ 
         status: "online", 
-        database_connected: !!pool 
+        database_connected: !!pool,
+        database_initialized: isDbInitialized
     });
 });
 
@@ -97,10 +112,8 @@ app.post('/api/check-license', async (req, res) => {
     }
 });
 
-// Экспорт для серверлесс среды Vercel
 module.exports = app;
 
-// Локальный запуск (если проект тестируется локально на ПК)
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`Локальный сервер запущен на порту ${PORT}`);
