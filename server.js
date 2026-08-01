@@ -101,7 +101,7 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// ГЕЙТВЕЙ ДЛЯ МОДА: ИСПРАВЛЕННАЯ ДВУХЭТАПНАЯ АВТОРИЗАЦИЯ
+// ГЕЙТВЕЙ ДЛЯ МОДА: ДВУХЭТАПНАЯ АВТОРИЗАЦИЯ
 app.get('/api/check-license', async (req, res) => {
     let key = req.query.key;
     let playerName = req.query.name;
@@ -111,7 +111,6 @@ app.get('/api/check-license', async (req, res) => {
     let inputLogin = req.query.login;
     let inputPassword = req.query.password;
 
-    // ФИКС: Все ответы для чита возвращаем со статус-кодом 200, чтобы Java-код их читал без ошибок
     if (!pool) return res.status(200).json({ success: false, status: "error", error: "База недоступна" });
     if (!key) return res.status(200).json({ success: false, status: "error", error: "Ключ пуст" });
 
@@ -119,6 +118,7 @@ app.get('/api/check-license', async (req, res) => {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key.trim().toUpperCase()]);
         if (result.rows.length === 0) return res.status(200).json({ success: false, status: "error", error: "Ключ не найден" });
 
+        // ФИКС: Берем именно первый элемент [0] из полученных строк БД, а не весь массив целиком
         const license = result.rows[0]; 
 
         if (license.status === 'banned') return res.status(200).json({ success: false, status: "error", error: "Лицензия заблокирована" });
@@ -146,7 +146,7 @@ app.get('/api/check-license', async (req, res) => {
             return res.status(200).json({ success: true, status: "success" });
         }
 
-        // 3. Сценарий обычной проверки (.code или повторный заход в Майнкрафт)
+        // 3. Сценарий обычной проверки (.code или повторный заход в игру)
         if (!license.login || !license.password) {
             return res.status(200).json({ success: true, status: "need_registration" });
         }
