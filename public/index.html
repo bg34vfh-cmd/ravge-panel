@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAVGE PREMIUM CONTROL v2.1</title>
+    <title>RAVGE PREMIUM CONTROL v2.2</title>
     <style>
         :root {
             --bg-main: #0a0516;
@@ -17,14 +17,46 @@
             --text-muted: #a497c2;
             --border: #2e1a4e;
         }
-        body {
+        * {
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
             background-color: var(--bg-main);
             color: var(--text-main);
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            margin: 0;
+        }
+        /* ФИКС: Экран логина теперь растягивается строго на весь экран, убирая белые/серые куски */
+        #login-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        #login-screen {
+            width: 100%;
+            max-width: 400px;
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            text-align: center;
+        }
+        #main-panel-wrapper {
             padding: 30px;
             display: flex;
             justify-content: center;
+            min-height: 100%;
+            background-color: var(--bg-main);
         }
         .container {
             width: 100%;
@@ -33,16 +65,6 @@
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 40px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
-        }
-        #login-screen {
-            max-width: 400px;
-            margin: 100px auto;
-            text-align: center;
-            background: var(--bg-card);
-            padding: 40px;
-            border-radius: 16px;
-            border: 1px solid var(--border);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
         }
         h1 {
@@ -176,56 +198,60 @@
 </head>
 <body>
 
-<!-- ЭКРАН АВТОРИЗАЦИИ -->
-<div id="login-screen">
-    <h1>RAVGE LOGIN</h1>
-    <p class="subtitle">Введите мастер-пароль панели</p>
-    <div class="input-group" style="margin-bottom: 20px;">
-        <input type="password" id="admin-pass" placeholder="Пароль администратора...">
+<!-- ПОЛНОЭКРАННЫЙ ЭКРАН АВТОРИЗАЦИИ -->
+<div id="login-wrapper">
+    <div id="login-screen">
+        <h1>RAVGE LOGIN</h1>
+        <p class="subtitle">Введите мастер-пароль панели</p>
+        <div class="input-group" style="margin-bottom: 20px;">
+            <input type="password" id="admin-pass" placeholder="Пароль администратора...">
+        </div>
+        <button onclick="login()" style="width: 100%;">Войти</button>
     </div>
-    <button onclick="login()" style="width: 100%;">Войти</button>
 </div>
 
 <!-- ОСНОВНАЯ ПАНЕЛЬ С КЛЮЧАМИ -->
-<div id="main-panel" class="container" style="display: none;">
-    <h1>RAVGE PREMIUM CONTROL</h1>
-    <p class="subtitle">Панель управления лицензиями • Разработчик ForTrilogy</p>
+<div id="main-panel-wrapper" style="display: none;">
+    <div class="container">
+        <h1>RAVGE PREMIUM CONTROL</h1>
+        <p class="subtitle">Панель управления лицензиями • Разработчик ForTrilogy</p>
 
-    <div class="control-panel">
-        <div class="input-group">
-            <label>Пользователь (Логин)</label>
-            <input type="text" id="username" placeholder="Пример: admin_test">
+        <div class="control-panel">
+            <div class="input-group">
+                <label>Пользователь (Логин)</label>
+                <input type="text" id="username" placeholder="Пример: admin_test">
+            </div>
+            <div class="input-group">
+                <label>Срок действия</label>
+                <select id="duration">
+                    <option value="7d">7 дней</option>
+                    <option value="15d">15 дней</option>
+                    <option value="30d">30 дней</option>
+                </select>
+            </div>
+            <button onclick="generateKey()" style="margin-top: 16px;">+ Создать лицензию</button>
         </div>
-        <div class="input-group">
-            <label>Срок действия</label>
-            <select id="duration">
-                <option value="7d">7 дней</option>
-                <option value="15d">15 дней</option>
-                <option value="30d">30 дней</option>
-            </select>
-        </div>
-        <button onclick="generateKey()" style="margin-top: 16px;">+ Создать лицензию</button>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Лицензионный ключ</th>
+                    <th>Логин (Веб)</th>
+                    <th>Ник в Minecraft</th>
+                    <th>HWID привязка</th>
+                    <th>Текущий Сервер</th>
+                    <th>Окончание подписки</th>
+                    <th>Действия / Продление / Удаление</th>
+                </tr>
+            </thead>
+            <tbody id="license-table">
+                <tr>
+                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Синхронизация данных...</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Лицензионный ключ</th>
-                <th>Логин (Веб)</th>
-                <th>Ник в Minecraft</th>
-                <th>HWID привязка</th>
-                <th>Текущий Сервер</th>
-                <th>Окончание подписки</th>
-                <th>Действия / Продление / Удаление</th>
-            </tr>
-        </thead>
-        <tbody id="license-table">
-            <tr>
-                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Синхронизация данных...</td>
-            </tr>
-        </tbody>
-    </table>
 </div>
 
 <script>
@@ -235,8 +261,8 @@
         const pass = document.getElementById('admin-pass').value;
         if (pass === 'coco2012coco!') {
             sessionPassword = pass;
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('main-panel').style.display = 'block';
+            document.getElementById('login-wrapper').style.display = 'none';
+            document.getElementById('main-panel-wrapper').style.display = 'flex';
             loadLicenses();
             setInterval(loadLicenses, 5000); // Обновление каждые 5 сек
         } else {
@@ -323,33 +349,33 @@
                 } else if (lic.last_server === 'В меню') {
                     serverBadge = `<span class="badge badge-menu">В меню</span>`;
                 } else if (lic.last_server && lic.last_server !== 'Оффлайн') {
-                    serverBadge = `<span class="badge badge-online">\${lic.last_server}</span>`;
+                    serverBadge = `<span class="badge badge-online">${lic.last_server}</span>`;
                 }
 
                 const banBtn = lic.is_banned 
-                    ? `<button class="btn-small btn-unban" onclick="toggleBan('\${lic.license_key}', true)">Разбанить</button>`
-                    : `<button class="btn-small btn-ban" onclick="toggleBan('\${lic.license_key}', false)">Забанить</button>`;
+                    ? `<button class="btn-small btn-unban" onclick="toggleBan('${lic.license_key}', true)">Разбанить</button>`
+                    : `<button class="btn-small btn-ban" onclick="toggleBan('${lic.license_key}', false)">Забанить</button>`;
 
-                const selectId = `extend-\${lic.id}`;
+                const selectId = `extend-${lic.id}`;
 
                 row.innerHTML = `
-                    <td>\${lic.id}</td>
-                    <td><span class="key-style">\${lic.license_key}</span></td>
-                    <td style="font-weight: bold; color: #fff;">\${lic.web_login || '—'}</td>
-                    <td style="color: #00f5d4; font-weight: 500;">\${lic.last_name || '—'}</td>
-                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">\${lic.hwid || 'Свободно'}</td>
-                    <td>\${serverBadge}</td>
-                    <td>\${expireDate}</td>
+                    <td>${lic.id}</td>
+                    <td><span class="key-style">${lic.license_key}</span></td>
+                    <td style="font-weight: bold; color: #fff;">${lic.web_login || '—'}</td>
+                    <td style="color: #00f5d4; font-weight: 500;">${lic.last_name || '—'}</td>
+                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${lic.hwid || 'Свободно'}</td>
+                    <td>${serverBadge}</td>
+                    <td>${expireDate}</td>
                     <td>
                         <div class="action-btns">
-                            \${banBtn}
-                            <select id="\${selectId}" style="padding: 6px; font-size: 12px; background: #251842;">
+                            ${banBtn}
+                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842;">
                                 <option value="7d">+7д</option>
                                 <option value="15d">+15д</option>
                                 <option value="30d">+30д</option>
                             </select>
-                            <button class="btn-small btn-extend" onclick="extendKey('\${lic.license_key}', '\${selectId}')">Продлить</button>
-                            <button class="btn-small btn-delete" onclick="deleteKey('\${lic.license_key}')">Удалить</button>
+                            <button class="btn-small btn-extend" onclick="extendKey('${lic.license_key}', '${selectId}')">Продлить</button>
+                            <button class="btn-small btn-delete" onclick="deleteKey('${lic.license_key}')">Удалить</button>
                         </div>
                     </td>
                 `;
