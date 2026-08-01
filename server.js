@@ -101,67 +101,65 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// ГЕЙТВЕЙ ДЛЯ МОДА: ДВУХЭТАПНАЯ АВТОРИЗАЦИЯ (.code и .reg)
+// ГЕЙТВЕЙ ДЛЯ МОДА: ИСПРАВЛЕННАЯ ДВУХЭТАПНАЯ АВТОРИЗАЦИЯ
 app.get('/api/check-license', async (req, res) => {
     let key = req.query.key;
     let playerName = req.query.name;
     let serverIp = req.query.server;
     let hwid = req.query.hwid;
-    let action = req.query.action || 'check'; // Может быть 'check' или 'register'
+    let action = req.query.action || 'check'; 
     let inputLogin = req.query.login;
     let inputPassword = req.query.password;
 
-    if (!pool) return res.status(500).json({ success: false, error: "База недоступна" });
-    if (!key) return res.status(400).json({ success: false, error: "Ключ пуст" });
+    // ФИКС: Все ответы для чита возвращаем со статус-кодом 200, чтобы Java-код их читал без ошибок
+    if (!pool) return res.status(200).json({ success: false, status: "error", error: "База недоступна" });
+    if (!key) return res.status(200).json({ success: false, status: "error", error: "Ключ пуст" });
 
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key.trim().toUpperCase()]);
-        if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Ключ не найден" });
+        if (result.rows.length === 0) return res.status(200).json({ success: false, status: "error", error: "Ключ не найден" });
 
-        const license = result.rows[0]; // Читаем первую строку из БД
+        const license = result.rows[0]; 
 
-        if (license.status === 'banned') return res.status(403).json({ success: false, error: "Лицензия заблокирована" });
+        if (license.status === 'banned') return res.status(200).json({ success: false, status: "error", error: "Лицензия заблокирована" });
         
         if (license.type !== 'reset' && license.expires_at && parseInt(license.expires_at) < Date.now()) {
-            return res.status(403).json({ success: false, error: "Срок действия истек" });
+            return res.status(200).json({ success: false, status: "error", error: "Срок действия истек" });
         }
 
         // 1. Проверка и привязка HWID устройства
         if (!license.hwid) {
             await pool.query('UPDATE licenses SET hwid = $1 WHERE key = $2', [hwid, key.trim().toUpperCase()]);
         } else if (license.hwid !== hwid) {
-            return res.status(403).json({ success: false, error: "Ошибка HWID (Ключ привязан к другому ПК)" });
+            return res.status(200).json({ success: false, status: "error", error: "Ошибка HWID (Ключ привязан к другому ПК)" });
         }
 
         // 2. Обработка команды регистрации покупателя (.reg)
         if (action === 'register') {
             if (!inputLogin || !inputPassword) {
-                return res.status(400).json({ success: false, error: "Логин или пароль пусты" });
+                return res.status(200).json({ success: false, status: "error", error: "Логин или пароль пусты" });
             }
-            // Сохраняем придуманные игроком логин и пароль в базу данных к этому ключу
             await pool.query(
                 'UPDATE licenses SET login = $1, password = $2 WHERE key = $3',
                 [inputLogin.trim(), inputPassword.trim(), key.trim().toUpperCase()]
             );
-            return res.json({ success: true, status: "success" });
+            return res.status(200).json({ success: true, status: "success" });
         }
 
         // 3. Сценарий обычной проверки (.code или повторный заход в Майнкрафт)
-        // Если логин или пароль в базе данных ещё отсутствуют — блокируем функции и требуем регистрацию
         if (!license.login || !license.password) {
-            return res.json({ success: true, status: "need_registration" });
+            return res.status(200).json({ success: true, status: "need_registration" });
         }
 
-        // Если регистрация уже успешно была пройдена ранее, обновляем лог активности и одобряем запуск премиума
         await pool.query(
             'UPDATE licenses SET last_seen = $1, player_name = $2, server_ip = $3 WHERE key = $4',
             [Date.now(), playerName || '—', serverIp || '—', key.trim().toUpperCase()]
         );
 
-        res.json({ success: true, status: "success" });
+        res.status(200).json({ success: true, status: "success" });
     } catch (err) { 
         console.error(err);
-        res.status(500).json({ success: false, error: "Внутренняя ошибка сервера" }); 
+        res.status(200).json({ success: false, status: "error", error: "Внутренняя ошибка сервера" }); 
     }
 });
 
