@@ -56,7 +56,6 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'Ключ не найден в базе данных' });
         }
 
-        // ИСПРАВЛЕНО: Получаем первый элемент из массива строк
         let row = result.rows[0];
 
         // 1. Проверка блокировки ключа
@@ -118,7 +117,6 @@ app.get('/api/verify', async (req, res) => {
         }
 
         // 9. Финальное обновление информации о сессии в базе
-        // В player_name теперь пишется чистый ник, логин хранится отдельно.
         await pool.query(
             'UPDATE keys SET hwid = $1, player_name = $2, server_ip = $3, last_seen = $4 WHERE key = $5', 
             [hwid, pName, finalServerField, Date.now(), key]
@@ -158,7 +156,7 @@ app.post('/api/admin/extend', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM keys WHERE id = $1', [targetId]);
         if (result.rows.length > 0) {
-            let row = result.rows[0]; // Исправлено получение строки
+            let row = result.rows[0]; // Исправлено: добавлен индекс [0]
             let newExpires = 0;
             let newDuration = Number(row.duration_ms);
 
@@ -179,8 +177,17 @@ app.post('/api/admin/extend', async (req, res) => {
 });
 
 app.post('/api/admin/delete', async (req, res) => {
+    const targetId = parseInt(req.body.id);
+    if (isNaN(targetId)) {
+        return res.json({ success: false, error: 'Некорректный ID ключа' });
+    }
+    
     try {
-        await pool.query('DELETE FROM keys WHERE id = $1', [parseInt(req.body.id)]);
+        const result = await pool.query('DELETE FROM keys WHERE id = $1', [targetId]);
+        // Проверяем, было ли реально что-то удалено из базы данных
+        if (result.rowCount === 0) {
+            return res.json({ success: false, error: 'Ключ с таким ID не найден в базе' });
+        }
         res.json({ success: true });
     } catch (err) {
         res.json({ success: false, error: err.message });
