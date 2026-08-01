@@ -13,7 +13,7 @@ const pool = new Pool({
         : { rejectUnauthorized: false }
 });
 
-// Функция автоматического создания и проверки таблицы базы данных
+// Автоматическая инициализация и проверка структуры таблицы базы данных
 async function initDatabase() {
     try {
         await pool.query(`
@@ -32,13 +32,12 @@ async function initDatabase() {
         console.error("Критическая ошибка инициализации базы данных:", err);
     }
 }
-
 initDatabase();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Улучшенный парсер тарифов (понимает "7 дней", "30 дней", "30d", "15 d")
+// Универсальный парсер входящих тарифов (поддерживает "7 дней", "30 дней", "30d", "15 d")
 function parseTimeToMs(timeInput) {
     if (!timeInput) return 30 * 24 * 60 * 60 * 1000;
     const value = parseInt(timeInput);
@@ -53,7 +52,7 @@ function parseTimeToMs(timeInput) {
     return value * 24 * 60 * 60 * 1000;
 }
 
-// Генератор ключей XXXX-XXXX-XXXX-XXXX
+// Генератор ключей формата XXXX-XXXX-XXXX-XXXX
 function generateRandomKey() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let key = '';
@@ -78,7 +77,7 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-// Контроллер генерации лицензии
+// Контроллер создания новой лицензии
 async function handleGenerateLicense(req, res) {
     const { password, duration } = req.body; 
     const adminPassword = process.env.ADMIN_PASSWORD || 'coco2012coco!';
@@ -113,16 +112,15 @@ app.post('/api/admin/generate-license', handleGenerateLicense);
 app.post('/api/admin/сгенерировать-лицензию', handleGenerateLicense);
 app.post('/api/admin/keys', handleGenerateLicense);
 
-// Контроллер получения списка ключей
+// Контроллер получения списка ключей для веб-интерфейса
 async function handleGetLicensesList(req, res) {
     try {
-        // ИСПРАВЛЕНО: Безопасное и точное приведение типов для вычисления оффлайн-игроков
-        await pool.query(`
-            UPDATE licenses 
-            SET last_server = 'Оффлайн' 
-            WHERE last_seen < NOW() - CAST('3 minutes' AS INTERVAL) 
-              AND last_server != 'Оффлайн'
-        `);
+        const offlineThreshold = new Date(Date.now() - 3 * 60 * 1000);
+
+        await pool.query(
+            "UPDATE licenses SET last_server = 'Оффлайн' WHERE last_seen < $1 AND last_server != 'Оффлайн'",
+            [offlineThreshold]
+        );
         
         const result = await pool.query('SELECT * FROM licenses ORDER BY id DESC');
         
@@ -140,7 +138,7 @@ app.get('/api/admin/keys', handleGetLicensesList);
 app.get('/api/admin/list', handleGetLicensesList);
 app.get('/api/licenses', handleGetLicensesList);
 
-// Проверка лицензии модом
+// Проверка лицензии модом игры и отслеживание положения клиента
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server, action } = req.query;
     if (!key || !hwid) return res.json({ success: false, error: 'Missing key or HWID' });
@@ -163,30 +161,44 @@ app.get('/api/verify', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1', [key]);
-        if (result.rows.length === 0) return res.json({ success: false, error: 'License not found' });
+        
+        // ЗАЩИТА: Проверяем, вернула ли база хоть одну строку
+        if (result.rows.length === 0) {
+            return res.json({ success: false, error: 'License not found' });
+        }
 
-        // ИСПРАВЛЕНО: берем первую строку rows[0], а не весь массив строк
+        // ИСПРАВЛЕНО: Теперь гарантированно берем единственный объект строки [0]
         const license = result.rows[0]; 
 
-        if (!license.hwid) {
-            await pool.query('UPDATE licenses SET hwid = $1 WHERE license_key = $2', [hwid, key]);
-        } else if (license.hwid !== hwid) {
+        // 1. Проверка на соответствие HWID (если он уже привязан)
+        if (license.hwid && license.hwid !== '' && license.hwid !== hwid) {
             return res.json({ success: false, error: 'HWID mismatch' });
         }
 
+        // 2. Проверка времени окончания подписки
         if (license.expires_at && new Date(license.expires_at) < new Date()) {
             return res.json({ success: false, error: 'License expired' });
         }
 
-        await pool.query(
-            'UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3',
-            [pName, currentStatus, key]
-        );
+        // 3. Только если лицензия полностью валидна — обновляем базу данных
+        if (!license.hwid || license.hwid === '') {
+            // Если первая авторизация — привязываем HWID и обновляем статус
+            await pool.query(
+                'UPDATE licenses SET hwid = $1, last_name = $2, last_server = $3, last_seen = NOW() WHERE license_key = $4',
+                [hwid, pName, currentStatus, key]
+            );
+        } else {
+            // Если повторная — обновляем только активность и ник
+            await pool.query(
+                'UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3',
+                [pName, currentStatus, key]
+            );
+        }
 
         return res.json({ success: true, message: 'License active' });
     } catch (err) {
-        console.error(err);
-        return res.status(500).json({ success: false });
+        console.error('Ошибка верификации:', err);
+        return res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
 
