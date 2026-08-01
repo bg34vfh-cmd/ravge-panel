@@ -1,131 +1,138 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8"><title>RAVGE Control</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAVGE PREMIUM Admin Panel</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { background: #0b0b0e; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 30px 10px; }
-        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0b0b0e; display: flex; justify-content: center; align-items: center; z-index: 999; }
-        .box { background: #121217; padding: 30px; border-radius: 12px; border: 2px solid #581c87; text-align: center; box-shadow: 0 0 20px rgba(88,28,135,0.4); width: 100%; max-width: 380px; }
-        .container { width: 100%; max-width: 1150px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 25px; box-shadow: 0 0 20px rgba(88,28,135,0.3); display: none; }
-        .panel { display: flex; gap: 10px; align-items: center; margin-bottom: 25px; background: #14141c; padding: 15px; border-radius: 8px; border: 1px solid #1f1f2e; }
-        
-        /* СТИЛЬ ВЫПАДАЮЩЕГО МЕНЮ */
-        select { background: #1c1c24; border: 1px solid #3f3f46; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer; }
-        select:focus { border-color: #a855f7; }
-        
-        input[type="text"], input[type="password"] { background: #1c1c24; border: 1px solid #3f3f46; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; }
-        input:focus { border-color: #a855f7; }
-        .btn { background: #581c87; color: #fff; border: none; padding: 9px 20px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; }
-        
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0b0b0e; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
+        .container { width: 100%; max-width: 1000px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
+        h1 { font-size: 28px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; }
+        h1 span { color: #a855f7; }
+        .subtitle { color: #71717a; font-size: 14px; margin-bottom: 25px; }
+        .btn { background: #581c87; color: #fff; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s ease-in-out; box-shadow: 0 4px 10px rgba(88, 28, 135, 0.3); }
+        .btn:hover { background: #7024ab; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(88, 28, 135, 0.5); }
+        .table-container { margin-top: 30px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px 14px; font-size: 13px; }
-        th { background: #181820; color: #a1a1aa; text-transform: uppercase; font-size: 11px; }
+        th, td { padding: 14px 18px; font-size: 14px; }
+        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
         tr { border-bottom: 1px solid #1f1f2e; }
-        .status.active { color: #4ade80; font-weight: bold; }
-        .status.banned { color: #f87171; font-weight: bold; }
-        .act-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-        .act-btn.ban { border-color: #ef4444; color: #f87171; }
-        .act-btn.ext { border-color: #3b82f6; color: #60a5fa; }
+        tr:last-child { border-bottom: none; }
+        tr:hover { background: #1b1b26; }
+        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; }
+        .status.active { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+        .status.banned { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        .badge { background: #27272a; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #d4d4d8; }
+        .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; margin-right: 5px; }
+        .action-btn.ban { border-color: #ef4444; color: #f87171; }
+        .action-btn.ban:hover { background: #ef4444; color: #fff; }
+        .action-btn.del { border-color: #71717a; color: #e4e4e7; }
+        .action-btn.del:hover { background: #e4e4e7; color: #000; }
+        .time { font-family: monospace; color: #c084fc; }
     </style>
 </head>
 <body>
 
-<div id="login-screen">
-    <div class="box">
-        <h2 style="margin-bottom:15px;">ВХОД В <span style="color:#a855f7;">GUARD</span></h2>
-        <input type="password" id="pass" placeholder="Пароль..." style="text-align:center; width:100%;">
-        <button class="btn" style="width:100%;" onclick="login()">Войти</button>
-        <div id="err" style="color:#f87171; font-size:12px; margin-top:10px; display:none;">❌ Доступ запрещен!</div>
-    </div>
-</div>
+<div class="container">
+    <h1>RAVGE <span>PREMIUM</span> CONTROL</h1>
+    <div class="subtitle">Разработчик: Forthbxr | Автономный облачный сервер на Vercel</div>
+    
+    <button class="btn" onclick="generateKey()">⚡ Сгенерировать новый 30-дней ключ</button>
 
-<div class="container" id="panel">
-    <h1 style="margin-bottom:15px;">RAVGE <span style="color:#a855f7;">PREMIUM</span> CONTROL</h1>
-    <div class="panel">
-        <span style="font-size:13px; color:#a1a1aa;">Время для нового ключа:</span>
-        <!-- ВЫПАДАЮЩЕЕ МЕНЮ ДЛЯ ГЕНЕРАЦИИ -->
-        <select id="gen-select" onchange="toggleGenCustom()">
-            <option value="30 д">30 Дней</option>
-            <option value="15 д">15 Дней</option>
-            <option value="7 д">7 Дней</option>
-            <option value="1 ч">1 Час</option>
-            <option value="custom">Свой формат...</option>
-        </select>
-        <input type="text" id="g-cust" placeholder="Пример: 10 мин, 5 ч" style="width:180px; display:none;">
-        <button class="btn" onclick="gen()" style="margin-left:auto;">＋ Создать Ключ</button>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Лицензионный Ключ</th>
+                    <th>Покупатель</th>
+                    <th>Сервер</th>
+                    <th>Окончание подписки</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="keys-table-body">
+                <!-- Сюда скрипт вставит строки из базы автоматически -->
+            </tbody>
+        </table>
     </div>
-    <table>
-        <thead><tr><th>ID</th><th>Ключ</th><th>Игрок</th><th>Сервер</th><th>Окончание</th><th>Статус</th><th>Действия</th></tr></thead>
-        <tbody id="tbody"></tbody>
-    </table>
 </div>
 
 <script>
-    async function login() {
-        const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:document.getElementById('pass').value}) });
-        if ((await res.json()).success) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('panel').style.display = 'block';
-            load(); setInterval(load, 3000);
-        } else document.getElementById('err').style.display = 'block';
+    // Загрузка ключей с сервера Vercel
+    async function loadKeys() {
+        try {
+            const res = await fetch('/api/admin/keys');
+            const data = await res.json();
+            if (!data.success) return;
+
+            const tbody = document.getElementById('keys-table-body');
+            tbody.innerHTML = '';
+
+            data.keys.forEach(item => {
+                const tr = document.createElement('tr');
+                
+                // Форматируем время окончания подписки
+                let expiresStr = 'Не активирован';
+                if (item.expires_at > 0) {
+                    const date = new Date(item.expires_at);
+                    expiresStr = date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                }
+
+                tr.innerHTML = `
+                    <td><span class="badge">#${item.id}</span></td>
+                    <td style="font-weight: bold; letter-spacing: 1px; color: #fff;">${item.key}</td>
+                    <td style="color: #60a5fa;">${item.player_name || '—'}</td>
+                    <td style="color: #fbbf24;">${item.server_ip || '—'}</td>
+                    <td class="time">${expiresStr}</td>
+                    <td><span class="status ${item.status}">${item.status === 'active' ? 'ACTIVE' : 'BANNED'}</span></td>
+                    <td>
+                        <button class="action-btn ban" onclick="toggleStatus(${item.id}, '${item.status}')">${item.status === 'active' ? 'Бан' : 'Разбан'}</button>
+                        <button class="action-btn del" onclick="deleteKey(${item.id})">Удалить</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            console.error("Ошибка обновления таблицы:", e);
+        }
     }
 
-    // Показ кастомного поля при генерации
-    function toggleGenCustom() {
-        const select = document.getElementById('gen-select');
-        document.getElementById('g-cust').style.display = select.value === 'custom' ? 'block' : 'none';
+    // Кнопка генерации ключа
+    async function generateKey() {
+        const res = await fetch('/api/admin/generate-license', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) loadKeys();
     }
 
-    // Показ кастомного поля при продлении для конкретной строки
-    function toggleExtCustom(id) {
-        const select = document.getElementById(`ext-select-${id}`);
-        document.getElementById(`e-cust-${id}`).style.display = select.value === 'custom' ? 'block' : 'none';
-    }
-    
-    async function load() {
-        const res = await fetch('/api/admin/keys'); const data = await res.json(); if (!data.success) return;
-        const tbody = document.getElementById('tbody'); tbody.innerHTML = '';
-        data.keys.forEach(item => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>#${item.id}</td><td style="font-weight:bold; letter-spacing:0.5px;">${item.key}</td>
-                <td style="color:#60a5fa;">${item.player_name||'—'}</td><td style="color:#fbbf24;">${item.server_ip||'—'}</td>
-                <td style="color:#c084fc;">${item.expires_at>0?new Date(item.expires_at).toLocaleString('ru-RU'):'Не активирован'}</td>
-                <td><span class="status ${item.status}">${item.status.toUpperCase()}</span></td>
-                <td>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <!-- ВЫПАДАЮЩЕЕ МЕНЮ ДЛЯ ПРОДЛЕНИЯ -->
-                        <select id="ext-select-${item.id}" onchange="toggleExtCustom(${item.id})">
-                            <option value="30 д">30 дней</option>
-                            <option value="15 д">15 дней</option>
-                            <option value="7 д">7 дней</option>
-                            <option value="1 ч">1 час</option>
-                            <option value="custom">Кастом...</option>
-                        </select>
-                        <input type="text" id="e-cust-${item.id}" placeholder="10 мин" style="width:75px; padding:6px; display:none;">
-                        
-                        <button class="act-btn ban" onclick="req('/toggle-status',{id:${item.id},currentStatus:'${item.status}'})">${item.status==='active'?'Бан':'Разбан'}</button>
-                        <button class="act-btn ext" onclick="ext(${item.id})">Продлить</button>
-                        <button class="act-btn" onclick="if(confirm('Удалить?'))req('/delete',{id:${item.id}})">Удалить</button>
-                    </div>
-                </td>`;
-            tbody.appendChild(tr);
+    // Кнопка банить / разбанить
+    async function toggleStatus(id, currentStatus) {
+        const res = await fetch('/api/admin/toggle-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, currentStatus })
         });
+        const data = await res.json();
+        if (data.success) loadKeys();
     }
-    async function req(url, body) { await fetch(`/api/admin${url}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); load(); }
-    
-    function gen() { 
-        const select = document.getElementById('gen-select');
-        const timeInput = select.value === 'custom' ? document.getElementById('g-cust').value : select.value;
-        req('/generate-license', { timeInput }); 
+
+    // Кнопка удалить ключ
+    async function deleteKey(id) {
+        if (!confirm("Вы точно хотите полностью удалить этот ключ из базы?")) return;
+        const res = await fetch('/api/admin/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) loadKeys();
     }
-    
-    function ext(id) { 
-        const select = document.getElementById(`ext-select-${id}`);
-        const timeInput = select.value === 'custom' ? document.getElementById(`e-cust-${id}`).value : select.value;
-        req('/extend', { id, timeInput }); 
-    }
+
+    // Автоматическое живое обновление таблицы каждые 3 секунды
+    loadKeys();
+    setInterval(loadKeys, 3000);
 </script>
 </body>
 </html>
