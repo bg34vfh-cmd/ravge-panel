@@ -21,7 +21,8 @@
         }
         .login-box h2 { margin-bottom: 20px; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
         .login-box h2 span { color: #a855f7; }
-        .login-box input { width: 100%; margin-bottom: 15px; padding: 12px; text-align: center; }
+        .login-box input { width: 100%; margin-bottom: 15px; padding: 12px; text-align: center; background: #1c1c28; color: #fff; border: 1px solid #4c1d95; border-radius: 6px; outline: none; }
+        .login-box input:focus { border-color: #a855f7; }
         .login-box .btn { width: 100%; padding: 12px; }
         .error-msg { color: #ef4444; font-size: 13px; margin-top: 10px; display: none; }
 
@@ -101,10 +102,10 @@
             const loginScreen = document.getElementById('login-screen');
             const adminPanel = document.getElementById('admin-panel');
 
-            // Проверка пароля
+            // Теперь код работает корректно
             if (input === 'coco2012coco!') {
                 loginScreen.style.display = 'none';
-                adminPanel.style.style.display = 'block';
+                adminPanel.style.display = 'block';
             } else {
                 errorTxt.style.display = 'block';
                 document.getElementById('pass-input').value = '';
