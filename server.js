@@ -36,7 +36,7 @@ app.post('/api/admin/login', (req, res) => {
     else res.json({ success: false });
 });
 
-// Проверка лицензии и авторизация
+// Проверка лицензии и авторизация игрока
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server, action, login, password } = req.query;
     if (!key || !hwid) return res.json({ success: false, error: 'Переданы не все параметры' });
@@ -56,6 +56,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'Ключ не найден в базе данных' });
         }
 
+        // ИСПРАВЛЕНО: Добавлен индекс [0] для выбора первой записи из СУБД
         let row = result.rows[0];
 
         // 1. Проверка блокировки ключа
@@ -76,7 +77,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'Срок действия вашей лицензии истёк' });
         }
 
-        // 4. Проверка HWID привязки (с защитой от null)
+        // 4. Проверка HWID привязки
         if (row.hwid && row.hwid.toString().trim().toUpperCase() !== hwid) {
             return res.json({ success: false, error: 'Ошибка авторизации: несовпадение HWID' });
         }
@@ -96,7 +97,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: true, need_register: true });
         }
 
-        // 7. ЗАЩИТА: Проверяем авторизационные данные (если это обычный вход-проверка)
+        // 7. ЗАЩИТА: Проверяем авторизационные данные
         const dbLogin = row.login ? row.login.toString().trim() : '';
         const dbPassword = row.password ? row.password.toString().trim() : '';
         
@@ -156,7 +157,8 @@ app.post('/api/admin/extend', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM keys WHERE id = $1', [targetId]);
         if (result.rows.length > 0) {
-            let row = result.rows[0]; // Исправлено: добавлен индекс [0]
+            // ИСПРАВЛЕНО: Добавлен индекс [0]
+            let row = result.rows[0]; 
             let newExpires = 0;
             let newDuration = Number(row.duration_ms);
 
@@ -184,7 +186,6 @@ app.post('/api/admin/delete', async (req, res) => {
     
     try {
         const result = await pool.query('DELETE FROM keys WHERE id = $1', [targetId]);
-        // Проверяем, было ли реально что-то удалено из базы данных
         if (result.rowCount === 0) {
             return res.json({ success: false, error: 'Ключ с таким ID не найден в базе' });
         }
