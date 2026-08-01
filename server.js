@@ -13,9 +13,8 @@ let licenses = [
     { id: 3, key: "NPN7-B5WR-CEZT-KID9", hwid: null, status: "active", expires_at: 0, duration_ms: 30 * 24 * 60 * 60 * 1000, type: "license", last_seen: 0, player_name: "—", server_ip: "—", banned_until: 0, login: null, password: null }
 ];
 
-// Хелпер для парсинга времени (10 мин, 5 ч, 1 д)
 function parseTimeToMs(timeInput) {
-    if (!timeInput) return 30 * 24 * 60 * 60 * 1000; // По умолчанию 30 дней
+    if (!timeInput) return 30 * 24 * 60 * 60 * 1000;
     const value = parseInt(timeInput) || 30;
     const unit = timeInput.toString().toLowerCase().replace(/[0-9]/g, '').trim();
     
@@ -27,6 +26,15 @@ function parseTimeToMs(timeInput) {
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ПРОВЕРКА ПАРОЛЯ АДМИНКИ СЕРВЕРОМ
+app.post('/api/admin/login', (req, res) => {
+    if (req.body.password === 'coco2012coco!') {
+        res.json({ success: true });
+    } else {
+        res.json({ success: false });
+    }
 });
 
 app.get('/api/verify', (req, res) => {
