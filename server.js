@@ -16,7 +16,7 @@ const pool = new Pool({
 // Флаг инициализации базы данных
 let isDbInitialized = false;
 
-// Гарантированная функция инициализации таблицы (вызывается внутри эндпоинтов)
+// Гарантированная функция инициализации таблицы
 async function ensureDatabaseReady() {
     if (isDbInitialized) return;
     
@@ -202,7 +202,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'License not found' });
         }
 
-        // ИСПРАВЛЕНО: Строго берём первую строку из массива через индекс [0]
+        // ИСПРАВЛЕНО: Извлекаем объект первой строки с индексом [0]
         const license = result.rows[0]; 
 
         // 1. Проверка на соответствие HWID (если он уже привязан)
