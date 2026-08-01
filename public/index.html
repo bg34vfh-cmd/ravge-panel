@@ -29,9 +29,9 @@
         .action-container { display: flex; align-items: center; gap: 5px; }
         .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
         .action-btn.ban { border-color: #ef4444; color: #f87171; }
-        .action-btn.ban:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+        .action-btn.ban:hover { background: #ef4444; color: #fff; }
         .action-btn.unban { border-color: #22c55e; color: #4ade80; }
-        .action-btn.unban:hover { background: #22c55e; color: #fff; border-color: #22c55e; }
+        .action-btn.unban:hover { background: #22c55e; color: #fff; }
         .action-btn.del { border-color: #71717a; color: #e4e4e7; }
         .action-btn.del:hover { background: #991b1b; color: #fff; border-color: #ef4444; }
         .action-btn.ext { border-color: #a855f7; color: #c084fc; font-weight: bold; }
@@ -137,6 +137,9 @@
                     }
                 }
 
+                let btnClass = item.status === 'active' ? 'ban' : 'unban';
+                let btnText = item.status === 'active' ? 'Бан' : 'Разбан';
+
                 tr.innerHTML = `
                     <td><span class="badge">#${item.id}</span></td>
                     <td style="font-weight: bold; color: #fff;">${item.key}</td>
@@ -156,8 +159,8 @@
                             </select>
                             <input type="text" id="ext-custom-${item.id}" placeholder="1 мин / 5 час" style="display: none; padding: 5px; font-size: 12px; width: 90px;">
                             <button class="action-btn ext" onclick="extendKey(${item.id})">➕ Продлить</button>
-                            <button class="action-btn \${item.status === 'active' ? 'ban' : 'unban'}" onclick="toggleStatus(\${item.id})">\${item.status === 'active' ? 'Бан' : 'Разбан'}</button>
-                            <button class="action-btn del" onclick="deleteKey(\${item.id})">Удалить</button>
+                            <button class="action-btn ${btnClass}" onclick="toggleStatus(${item.id})">${btnText}</button>
+                            <button class="action-btn del" onclick="deleteKey(${item.id})">Удалить</button>
                         </div>
                     </td>
                 `;
