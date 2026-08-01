@@ -1,17 +1,19 @@
 const express = require('express');
 const path = require('path');
+const { Pool } = require('pg'); // Подключаем драйвер для работы с Neon PostgreSQL
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// НАСТРОЙКА ПОДКЛЮЧЕНИЯ К NEON POSTGRESQL
+// Обязательно добавьте переменную окружения DATABASE_URL в настройках вашего проекта на Vercel!
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
-let licenses = [
-    { id: 1, key: "6YZD-5LKM-SW3Y-MSCJ", hwid: null, status: "active", expires_at: 0, duration_ms: 30 * 24 * 60 * 60 * 1000, type: "license", last_seen: 0, player_name: "—", server_ip: "—", banned_until: 0, login: null, password: null },
-    { id: 2, key: "EFYB-HJYB-RNJL-0MLD", hwid: null, status: "active", expires_at: 0, duration_ms: 30 * 24 * 60 * 60 * 1000, type: "license", last_seen: 0, player_name: "—", server_ip: "—", banned_until: 0, login: null, password: null },
-    { id: 3, key: "NPN7-B5WR-CEZT-KID9", hwid: null, status: "active", expires_at: 0, duration_ms: 30 * 24 * 60 * 60 * 1000, type: "license", last_seen: 0, player_name: "—", server_ip: "—", banned_until: 0, login: null, password: null }
-];
 
 function parseTimeToMs(timeInput) {
     if (!timeInput) return 30 * 24 * 60 * 60 * 1000;
@@ -32,94 +34,173 @@ app.post('/api/admin/login', (req, res) => {
     else res.json({ success: false });
 });
 
-// МОДЕРНИЗИРОВАННАЯ ПРОВЕРКА: Жесткий сброс при бане
-app.get('/api/verify', (req, res) => {
-    let { key, hwid, name, server } = req.query;
-    if (!key || !hwid) return res.send('{"success":false}');
+// МОДЕРНИЗИРОВАННЫЙ ЭНДПОИНТ ПРОВЕРКИ И РЕГИСТРАЦИИ (Работает с базой данных)
+app.get('/api/verify', async (req, res) => {
+    let { key, hwid, name, server, action, login, password } = req.query;
+    if (!key || !hwid) return res.json({ success: false });
+
     key = key.trim().toUpperCase();
     hwid = hwid.trim().toUpperCase();
     const pName = name ? decodeURIComponent(name) : '—';
     const sIp = server ? decodeURIComponent(server) : '—';
 
-    let row = licenses.find(l => l.key === key);
-    
-    // Если ключ забанен — мгновенно шлём ложь и сбрасываем сессию, чтобы чит сразу отключился!
-    if (!row || row.status !== 'active') {
-        if (row) { row.player_name = "ЗАБАНЕН"; row.server_ip = "—"; }
-        return res.send('{"success":false}');
-    }
-    
-    if (row.banned_until && row.banned_until > Date.now()) return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
+    try {
+        // Ищем ключ в базе данных Neon
+        const result = await pool.query('SELECT * FROM keys WHERE key = $1', [key]);
+        if (result.rows.length === 0) {
+            return res.json({ success: false, error: 'Ключ не найден' });
+        }
 
-    if (row.type === 'license' && row.expires_at === 0) {
-        row.expires_at = Date.now() + row.duration_ms;
-    }
+        let row = result.rows[0];
 
-    if (row.expires_at !== 0 && Date.now() > row.expires_at) return res.send('{"success":false}');
-    if (!row.login || !row.password) return res.send('{"success":true,"need_register":true}');
+        // Проверка бана
+        if (row.status !== 'active') {
+            await pool.query('UPDATE keys SET player_name = $1, server_ip = $2 WHERE key = $3', ['ЗАБАНЕН', '—', key]);
+            return res.json({ success: false, error: 'Ключ заблокирован' });
+        }
 
-    row.last_seen = Date.now();
-    row.player_name = pName;
-    row.server_ip = sIp;
+        // Активация времени при первом старте
+        let expiresAt = row.expires_at;
+        if (row.expires_at == 0) {
+            expiresAt = Date.now() + Number(row.duration_ms);
+            await pool.query('UPDATE keys SET expires_at = $1 WHERE key = $2', [expiresAt, key]);
+        }
 
-    if (!row.hwid) {
-        row.hwid = hwid;
-        return res.send('{"success":true}');
-    } else {
-        if (row.hwid.trim().toUpperCase() === hwid) return res.send('{"success":true}');
-        else return res.send('{"success":false}');
+        // Проверка истечения лицензии
+        if (expiresAt !== 0 && Date.now() > expiresAt) {
+            return res.json({ success: false, error: 'Срок действия лицензии истёк' });
+        }
+
+        // ОБРАБОТКА ДЕЙСТВИЯ: РЕГИСТРАЦИЯ
+        if (action === 'register') {
+            if (!login || !password) {
+                return res.json({ success: false, error: 'Укажите логин и пароль' });
+            }
+            // Сохраняем логин, пароль, HWID, ник и сервер в базу данных
+            await pool.query(
+                'UPDATE keys SET login = $1, password = $2, hwid = $3, player_name = $4, server_ip = $5, last_seen = $6 WHERE key = $7',
+                [login.trim(), password.trim(), hwid, pName, sIp, Date.now(), key]
+            );
+            return res.json({ success: true });
+        }
+
+        // ОБРАБОТКА ДЕЙСТВИЯ: ОБЫЧНАЯ ПРОВЕКА (CHECK)
+        // Если логина или пароля ещё нет — просим зарегистрироваться
+        if (!row.login || !row.password) {
+            return res.json({ success: true, need_register: true });
+        }
+
+        // Проверка HWID
+        if (!row.hwid) {
+            // Если HWID ещё не привязан — привязываем
+            await pool.query(
+                'UPDATE keys SET hwid = $1, player_name = $2, server_ip = $3, last_seen = $4 WHERE key = $5',
+                [hwid, pName, sIp, Date.now(), key]
+            );
+            return res.json({ success: true });
+        } else {
+            if (row.hwid.trim().toUpperCase() === hwid) {
+                // Если HWID совпал — обновляем онлайн-статус игрока
+                await pool.query(
+                    'UPDATE keys SET player_name = $1, server_ip = $2, last_seen = $3 WHERE key = $4',
+                    [pName, sIp, Date.now(), key]
+                );
+                return res.json({ success: true });
+            } else {
+                return res.json({ success: false, error: 'Ошибка HWID привязки' });
+            }
+        }
+    } catch (err) {
+        return res.json({ success: false, error: 'Ошибка БД: ' + err.message });
     }
 });
 
-app.post('/api/admin/generate-license', (req, res) => {
+// ГЕНЕРАЦИЯ КЛЮЧА (Запись в Neon)
+app.post('/api/admin/generate-license', async (req, res) => {
     const { timeInput } = req.body;
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
     const newKey = `${genPart()}-${genPart()}-${genPart()}-${genPart()}`;
-    const newId = licenses.length > 0 ? licenses[licenses.length - 1].id + 1 : 1;
     const addMs = parseTimeToMs(timeInput);
 
-    licenses.push({
-        id: newId, key: newKey, hwid: null, status: "active", expires_at: 0, duration_ms: addMs,
-        type: "license", last_seen: 0, player_name: "—", server_ip: "—", banned_until: 0, login: null, password: null
-    });
-    res.json({ success: true });
+    try {
+        await pool.query(
+            'INSERT INTO keys (key, hwid, status, expires_at, duration_ms, type, last_seen, player_name, server_ip, banned_until, login, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+            [newKey, null, 'active', 0, addMs, 'license', 0, '—', '—', 0, null, null]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
 });
 
-app.post('/api/admin/extend', (req, res) => {
+// ПРОДЛЕНИЕ СРОКА КЛЮЧА
+app.post('/api/admin/extend', async (req, res) => {
     const targetId = parseInt(req.body.id);
     const addMs = parseTimeToMs(req.body.timeInput);
-    let row = licenses.find(l => l.id === targetId);
-    if (row) {
-        if (row.expires_at === 0) row.duration_ms += addMs;
-        else row.expires_at = (row.expires_at < Date.now() ? Date.now() : row.expires_at) + addMs;
-        return res.json({ success: true });
-    }
-    res.json({ success: false });
-});
 
-app.post('/api/admin/delete', (req, res) => {
-    licenses = licenses.filter(l => l.id !== parseInt(req.body.id));
-    res.json({ success: true });
-});
+    try {
+        const result = await pool.query('SELECT * FROM keys WHERE id = $1', [targetId]);
+        if (result.rows.length > 0) {
+            let row = result.rows[0];
+            let newExpires = 0;
+            let newDuration = Number(row.duration_ms);
 
-// ИСПРАВЛЕНО НА 100%: Принудительный сброс параметров авторизации при клике
-app.post('/api/admin/toggle-status', (req, res) => {
-    const targetId = parseInt(req.body.id);
-    let row = licenses.find(l => l.id === targetId);
-    if (row) {
-        row.status = row.status === 'active' ? 'banned' : 'active';
-        if (row.status === 'banned') {
-            row.player_name = "БАН-ОФЛАЙН";
-            row.server_ip = "—";
-            row.hwid = null; // Сбрасываем HWID, чтобы ключ стал "чистым" после разбана
+            if (Number(row.expires_at) === 0) {
+                newDuration += addMs;
+            } else {
+                let baseTime = Number(row.expires_at) < Date.now() ? Date.now() : Number(row.expires_at);
+                newExpires = baseTime + addMs;
+            }
+
+            await pool.query('UPDATE keys SET duration_ms = $1, expires_at = $2 WHERE id = $3', [newDuration, newExpires, targetId]);
+            return res.json({ success: true });
         }
-        return res.json({ success: true });
+        res.json({ success: false });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
     }
-    res.json({ success: false });
 });
 
-app.get('/api/admin/keys', (req, res) => {
-    res.json({ success: true, keys: licenses });
+// УДАЛЕНИЕ КЛЮЧА
+app.post('/api/admin/delete', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM keys WHERE id = $1', [parseInt(req.body.id)]);
+        res.json({ success: true });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// БАН КЛЮЧА / СБРОС СЕССИИ
+app.post('/api/admin/toggle-status', async (req, res) => {
+    const targetId = parseInt(req.body.id);
+    try {
+        const result = await pool.query('SELECT status FROM keys WHERE id = $1', [targetId]);
+        if (result.rows.length > 0) {
+            const currentStatus = result.rows[0].status;
+            const newStatus = currentStatus === 'active' ? 'banned' : 'active';
+            
+            if (newStatus === 'banned') {
+                await pool.query('UPDATE keys SET status = $1, player_name = $2, server_ip = $3, hwid = $4 WHERE id = $5', ['banned', 'БАН-ОФЛАЙН', '—', null, targetId]);
+            } else {
+                await pool.query('UPDATE keys SET status = $1 WHERE id = $2', ['active', targetId]);
+            }
+            return res.json({ success: true });
+        }
+        res.json({ success: false });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
+});
+
+// ПОЛУЧЕНИЕ ВСЕХ КЛЮЧЕЙ ДЛЯ ОТОБРАЖЕНИЯ НА САЙТЕ
+app.get('/api/admin/keys', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM keys ORDER BY id ASC');
+        res.json({ success: true, keys: result.rows });
+    } catch (err) {
+        res.json({ success: false, error: err.message });
+    }
 });
 
 module.exports = app;
