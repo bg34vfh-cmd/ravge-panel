@@ -7,13 +7,16 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: #0b0b0e; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
-        .container { width: 100%; max-width: 1000px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
+        .container { width: 100%; max-width: 1200px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
         h1 { font-size: 28px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; }
         h1 span { color: #a855f7; }
         .subtitle { color: #71717a; font-size: 14px; margin-bottom: 25px; }
+        .controls { display: flex; gap: 15px; margin-bottom: 20px; }
         .btn { background: #581c87; color: #fff; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s ease-in-out; box-shadow: 0 4px 10px rgba(88, 28, 135, 0.3); }
         .btn:hover { background: #7024ab; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(88, 28, 135, 0.5); }
-        .table-container { margin-top: 30px; overflow-x: auto; }
+        .btn.danger { background: #7f1d1d; box-shadow: 0 4px 10px rgba(127, 29, 29, 0.3); border: 1px solid #ef4444; }
+        .btn.danger:hover { background: #991b1b; box-shadow: 0 6px 15px rgba(127, 29, 29, 0.5); }
+        .table-container { margin-top: 20px; overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
         th, td { padding: 14px 18px; font-size: 14px; }
         th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
@@ -30,15 +33,18 @@
         .action-btn.del { border-color: #71717a; color: #e4e4e7; }
         .action-btn.del:hover { background: #e4e4e7; color: #000; }
         .time { font-family: monospace; color: #c084fc; }
+        .hwid-text { font-family: monospace; font-size: 11px; color: #a1a1aa; max-width: 1200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>RAVGE <span>PREMIUM</span> CONTROL</h1>
-    <div class="subtitle">Разработчик: Forthbxr | Автономный облачный сервер на Vercel</div>
+    <div class="subtitle">Разработчик: Forthbxr | Облачная база данных Neon PostgreSQL</div>
     
-    <button class="btn" onclick="generateKey()">⚡ Сгенерировать новый 30-дней ключ</button>
+    <div class="controls">
+        <button class="btn" onclick="generateKey()">⚡ Сгенерировать новый 30-дней ключ</button>
+    </div>
 
     <div class="table-container">
         <table>
@@ -46,7 +52,8 @@
                 <tr>
                     <th>ID</th>
                     <th>Лицензионный Ключ</th>
-                    <th>Покупатель</th>
+                    <th>Пользователь (Логин)</th>
+                    <th>HWID привязка</th>
                     <th>Сервер</th>
                     <th>Окончание подписки</th>
                     <th>Статус</th>
@@ -54,14 +61,13 @@
                 </tr>
             </thead>
             <tbody id="keys-table-body">
-                <!-- Сюда скрипт вставит строки из базы автоматически -->
+                <!-- Строки генерируются автоматически -->
             </tbody>
         </table>
     </div>
 </div>
 
 <script>
-    // Загрузка ключей с сервера Vercel
     async function loadKeys() {
         try {
             const res = await fetch('/api/admin/keys');
@@ -74,17 +80,23 @@
             data.keys.forEach(item => {
                 const tr = document.createElement('tr');
                 
-                // Форматируем время окончания подписки
                 let expiresStr = 'Не активирован';
                 if (item.expires_at > 0) {
-                    const date = new Date(item.expires_at);
+                    const date = new Date(Number(item.expires_at));
                     expiresStr = date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                }
+
+                // Форматируем вывод Имени и Логина игрока
+                let userDisplay = item.player_name || '—';
+                if (item.login) {
+                    userDisplay += ` <span style="color: #a855f7; font-size: 12px;">(${item.login})</span>`;
                 }
 
                 tr.innerHTML = `
                     <td><span class="badge">#${item.id}</span></td>
                     <td style="font-weight: bold; letter-spacing: 1px; color: #fff;">${item.key}</td>
-                    <td style="color: #60a5fa;">${item.player_name || '—'}</td>
+                    <td style="color: #60a5fa;">${userDisplay}</td>
+                    <td><div class="hwid-text" title="${item.hwid || 'Не привязан'}">${item.hwid || '—'}</div></td>
                     <td style="color: #fbbf24;">${item.server_ip || '—'}</td>
                     <td class="time">${expiresStr}</td>
                     <td><span class="status ${item.status}">${item.status === 'active' ? 'ACTIVE' : 'BANNED'}</span></td>
@@ -100,14 +112,16 @@
         }
     }
 
-    // Кнопка генерации ключа
     async function generateKey() {
-        const res = await fetch('/api/admin/generate-license', { method: 'POST' });
+        const res = await fetch('/api/admin/generate-license', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timeInput: "30d" })
+        });
         const data = await res.json();
         if (data.success) loadKeys();
     }
 
-    // Кнопка банить / разбанить
     async function toggleStatus(id, currentStatus) {
         const res = await fetch('/api/admin/toggle-status', {
             method: 'POST',
@@ -118,7 +132,6 @@
         if (data.success) loadKeys();
     }
 
-    // Кнопка удалить ключ
     async function deleteKey(id) {
         if (!confirm("Вы точно хотите полностью удалить этот ключ из базы?")) return;
         const res = await fetch('/api/admin/delete', {
@@ -130,7 +143,6 @@
         if (data.success) loadKeys();
     }
 
-    // Автоматическое живое обновление таблицы каждые 3 секунды
     loadKeys();
     setInterval(loadKeys, 3000);
 </script>
