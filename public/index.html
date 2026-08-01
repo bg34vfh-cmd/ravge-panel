@@ -7,7 +7,31 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
         body { background: #0b0b0e; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
-        .container { width: 100%; max-width: 1300px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
+        
+        /* Экран авторизации */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0b0b0e; display: flex; align-items: center;
+            justify-content: center; z-index: 9999;
+        }
+        .login-box {
+            background: #121217; padding: 30px; border-radius: 12px;
+            border: 2px solid #581c87; text-align: center;
+            box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); width: 100%; max-width: 400px;
+        }
+        .login-box h2 { margin-bottom: 20px; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
+        .login-box h2 span { color: #a855f7; }
+        .login-box input { width: 100%; margin-bottom: 15px; padding: 12px; text-align: center; }
+        .login-box .btn { width: 100%; padding: 12px; }
+        .error-msg { color: #ef4444; font-size: 13px; margin-top: 10px; display: none; }
+
+        /* Основной контент панели (скрыт по умолчанию) */
+        .container { 
+            display: none; width: 100%; max-width: 1300px; 
+            background: #121217; border-radius: 12px; border: 2px solid #581c87; 
+            padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); 
+        }
+        
         h1 { font-size: 28px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; }
         h1 span { color: #a855f7; }
         .subtitle { color: #71717a; font-size: 14px; margin-bottom: 25px; }
@@ -19,149 +43,80 @@
         .table-container { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
-        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; tr { border-bottom: 1px solid #1f1f2e; } }
+        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
+        tr { border-bottom: 1px solid #1f1f2e; }
         tr:hover { background: #1b1b26; }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
-        .status.active { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-        .status.banned { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-        .badge { background: #27272a; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #d4d4d8; }
-        .action-container { display: flex; align-items: center; gap: 5px; }
-        .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
-        .action-btn.ban { border-color: #ef4444; color: #f87171; }
-        .action-btn.ban:hover { background: #ef4444; color: #fff; }
-        .action-btn.unban { border-color: #22c55e; color: #4ade80; }
-        .action-btn.unban:hover { background: #22c55e; color: #fff; }
-        .action-btn.del { border-color: #71717a; color: #e4e4e7; }
-        .action-btn.del:hover { background: #991b1b; color: #fff; border-color: #ef4444; }
-        .action-btn.ext { border-color: #a855f7; color: #c084fc; font-weight: bold; }
-        .action-btn.ext:hover { background: #a855f7; color: #fff; }
-        .time { font-family: monospace; color: #c084fc; font-weight: bold; }
-        .hwid-text { font-family: monospace; font-size: 11px; color: #71717a; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>RAVGE <span>PREMIUM</span> CONTROL</h1>
-    <div class="subtitle">Разработчик: Forthbxr | Полное управление Neon БД</div>
-    
-    <div class="generator-block">
-        <span style="font-size: 14px; font-weight: bold; color: #c084fc;">🔑 Создать ключ на:</span>
-        <select id="gen-time-select" onchange="toggleCustomInput('gen-time-select', 'gen-custom-time')">
-            <option value="7d">7 дней</option>
-            <option value="15d">15 дней</option>
-            <option value="30d" selected>30 дней</option>
-            <option value="custom">Кастомное время...</option>
-        </select>
-        <input type="text" id="gen-custom-time" placeholder="Пример: 5 мин, 2 час, 1 д" style="display: none; width: 220px;">
-        <button class="btn" onclick="generateKey()">⚡ Сгенерировать ключ</button>
+    <!-- Форма входа -->
+    <div id="login-screen">
+        <div class="login-box">
+            <h2><span>RAVGE</span> LOGIN</h2>
+            <input type="password" id="pass-input" placeholder="Введите пароль" autofocus>
+            <button class="btn" onclick="checkPassword()">Войти</button>
+            <div class="error-msg" id="error-txt">Неверный пароль!</div>
+        </div>
     </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Лицензионный Ключ</th>
-                    <th>Пользователь (Логин)</th>
-                    <th>HWID привязка</th>
-                    <th>Сервер</th>
-                    <th>Окончание подписки</th>
-                    <th>Статус</th>
-                    <th>Действия управления</th>
-                </tr>
-            </thead>
-            <tbody id="keys-table-body"></tbody>
-        </table>
+    <!-- Основная панель -->
+    <div class="container" id="admin-panel">
+        <h1><span>RAVGE</span> PREMIUM</h1>
+        <div class="subtitle">Панель управления администратора</div>
+        
+        <div class="generator-block">
+            <input type="text" placeholder="Значение...">
+            <select>
+                <option>Опция 1</option>
+                <option>Опция 2</option>
+            </select>
+            <button class="btn">Действие</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Статус</th>
+                        <th>Дата</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>#1001</td>
+                        <td>Активен</td>
+                        <td>01.08.2026</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-<script>
-    function toggleCustomInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        input.style.display = select.value === 'custom' ? 'inline-block' : 'none';
-    }
+    <script>
+        function checkPassword() {
+            const input = document.getElementById('pass-input').value;
+            const errorTxt = document.getElementById('error-txt');
+            const loginScreen = document.getElementById('login-screen');
+            const adminPanel = document.getElementById('admin-panel');
 
-    async function sendRequest(url, body = null) {
-        const options = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
-        const res = await fetch(url, options);
-        return await res.json();
-    }
-
-    async function loadKeys() {
-        try {
-            const data = await sendRequest('/api/admin/keys');
-            if (!data.success) return;
-
-            const tbody = document.getElementById('keys-table-body');
-            tbody.innerHTML = '';
-
-            data.keys.forEach(item => {
-                const tr = document.createElement('tr');
-                let expiresStr = item.expires_at > 0 ? new Date(Number(item.expires_at)).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Не активирован';
-                let userDisplay = item.player_name || '—';
-                if (item.login) userDisplay += ` <span style="color: #a855f7; font-size: 12px; font-weight:bold;">(${item.login})</span>`;
-
-                tr.innerHTML = `
-                    <td><span class="badge">#${item.id}</span></td>
-                    <td style="font-weight: bold; color: #fff;">${item.key}</td>
-                    <td style="color: #60a5fa; font-weight: 500;">${userDisplay}</td>
-                    <td><div class="hwid-text" title="${item.hwid || 'Нет'}">${item.hwid || '—'}</div></td>
-                    <td style="color: #fbbf24; font-size: 12px;">${item.server_ip || '—'}</td>
-                    <td class="time">${expiresStr}</td>
-                    <td><span class="status ${item.status}">${item.status === 'active' ? 'ACTIVE' : 'BANNED'}</span></td>
-                    <td>
-                        <div class="action-container">
-                            <select id="ext-select-${item.id}" style="padding: 5px; font-size: 12px;" onchange="toggleCustomInput('ext-select-${item.id}', 'ext-custom-${item.id}')">
-                                <option value="1h">1 час</option>
-                                <option value="1d">1 день</option>
-                                <option value="7d">7 дней</option>
-                                <option value="30d" selected>30 дней</option>
-                                <option value="custom">Кастом...</option>
-                            </select>
-                            <input type="text" id="ext-custom-${item.id}" placeholder="1 мин / 5 час" style="display: none; padding: 5px; font-size: 12px; width: 90px;">
-                            <button class="action-btn ext" onclick="extendKey(${item.id})">➕ Продлить</button>
-                            <button class="action-btn ${item.status === 'active' ? 'ban' : 'unban'}" onclick="toggleStatus(${item.id})">${item.status === 'active' ? 'Бан' : 'Разбан'}</button>
-                            <button class="action-btn del" onclick="deleteKey(${item.id})">Удалить</button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        } catch (e) { console.error(e); }
-    }
-
-    async function generateKey() {
-        const select = document.getElementById('gen-time-select');
-        const customInput = document.getElementById('gen-custom-time');
-        const timeValue = select.value === 'custom' ? customInput.value : select.value;
-        const data = await sendRequest('/api/admin/generate-license', { timeInput: timeValue });
-        if (data.success) { customInput.value = ''; loadKeys(); } else alert("Ошибка: " + data.error);
-    }
-
-    async function extendKey(id) {
-        const select = document.getElementById(`ext-select-${id}`);
-        const customInput = document.getElementById(`ext-custom-${id}`);
-        const timeValue = select.value === 'custom' ? customInput.value : select.value;
-        const data = await sendRequest('/api/admin/extend', { id, timeInput: timeValue });
-        if (data.success) loadKeys(); else alert("Ошибка: " + data.error);
-    }
-
-    async function toggleStatus(id) {
-        const data = await sendRequest('/api/admin/toggle-status', { id });
-        if (data.success) loadKeys();
-    }
-
-    async function deleteKey(id) {
-        if (confirm("Удалить этот ключ из базы?")) {
-            const data = await sendRequest('/api/admin/delete', { id });
-            if (data.success) loadKeys();
+            // Проверка пароля
+            if (input === 'coco2012coco!') {
+                loginScreen.style.display = 'none';
+                adminPanel.style.style.display = 'block';
+            } else {
+                errorTxt.style.display = 'block';
+                document.getElementById('pass-input').value = '';
+            }
         }
-    }
 
-    loadKeys();
-    setInterval(loadKeys, 4000);
-</script>
+        // Вход по нажатию Enter
+        document.getElementById('pass-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkPassword();
+            }
+        });
+    </script>
 </body>
 </html>
