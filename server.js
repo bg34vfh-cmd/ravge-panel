@@ -16,7 +16,6 @@ const pool = new Pool({
 // Функция автоматического создания и проверки таблицы базы данных
 async function initDatabase() {
     try {
-        // Создаем таблицу, если её нет
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id SERIAL PRIMARY KEY,
@@ -34,7 +33,6 @@ async function initDatabase() {
     }
 }
 
-// Запускаем инициализацию БД
 initDatabase();
 
 app.use(express.json());
@@ -118,9 +116,14 @@ app.post('/api/admin/keys', handleGenerateLicense);
 // Контроллер получения списка ключей
 async function handleGetLicensesList(req, res) {
     try {
-        await pool.query(
-            "UPDATE licenses SET last_server = 'Оффлайн' WHERE last_seen < NOW() - INTERVAL '3 minutes' AND last_server != 'Оффлайн'"
-        );
+        // ИСПРАВЛЕНО: Безопасное и точное приведение типов для вычисления оффлайн-игроков
+        await pool.query(`
+            UPDATE licenses 
+            SET last_server = 'Оффлайн' 
+            WHERE last_seen < NOW() - CAST('3 minutes' AS INTERVAL) 
+              AND last_server != 'Оффлайн'
+        `);
+        
         const result = await pool.query('SELECT * FROM licenses ORDER BY id DESC');
         
         if (req.query.raw === 'true') {
@@ -128,7 +131,7 @@ async function handleGetLicensesList(req, res) {
         }
         return res.json({ success: true, licenses: result.rows });
     } catch (err) {
-        console.error(err);
+        console.error('Ошибка получения списка ключей:', err);
         return res.status(500).json({ success: false, licenses: [] });
     }
 }
@@ -162,7 +165,8 @@ app.get('/api/verify', async (req, res) => {
         const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1', [key]);
         if (result.rows.length === 0) return res.json({ success: false, error: 'License not found' });
 
-        const license = result.rows[0]; // Исправлено обращение к строке результата
+        // ИСПРАВЛЕНО: берем первую строку rows[0], а не весь массив строк
+        const license = result.rows[0]; 
 
         if (!license.hwid) {
             await pool.query('UPDATE licenses SET hwid = $1 WHERE license_key = $2', [hwid, key]);
