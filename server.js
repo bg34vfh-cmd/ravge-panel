@@ -13,7 +13,7 @@ const pool = new Pool({
         : { rejectUnauthorized: false }
 });
 
-// Флаг, чтобы не мучить базу лишними проверками таблиц после её создания
+// Флаг инициализации базы данных
 let isDbInitialized = false;
 
 // Гарантированная функция инициализации таблицы (вызывается внутри эндпоинтов)
@@ -21,7 +21,6 @@ async function ensureDatabaseReady() {
     if (isDbInitialized) return;
     
     try {
-        // Создаем правильную таблицу, если её вообще не было
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id SERIAL PRIMARY KEY,
@@ -58,7 +57,7 @@ async function ensureDatabaseReady() {
         console.log("База данных успешно проверена и полностью готова к работе.");
     } catch (err) {
         console.error("Критическая ошибка инициализации базы данных:", err);
-        throw err; // Пробрасываем ошибку дальше, чтобы остановить упавший запрос
+        throw err;
     }
 }
 
@@ -92,9 +91,7 @@ function generateRandomKey() {
 }
 
 app.get('/', async (req, res) => {
-    try {
-        await ensureDatabaseReady(); // Готовим БД при визите на сайт
-    } catch(e) {}
+    try { await ensureDatabaseReady(); } catch(e) {}
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -205,6 +202,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'License not found' });
         }
 
+        // ИСПРАВЛЕНО: Строго берём первую строку из массива через индекс [0]
         const license = result.rows[0]; 
 
         // 1. Проверка на соответствие HWID (если он уже привязан)
