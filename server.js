@@ -1,248 +1,474 @@
-const express = require('express');
-const path = require('path');
-const { Pool } = require('pg');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = 'coco2012coco!';
-
-// Подключение к Neon PostgreSQL с адаптивным SSL под продакшн Vercel
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' 
-        ? { rejectUnauthorized: true, sslmode: 'verify-full' } 
-        : { rejectUnauthorized: false }
-});
-
-let isDbInitialized = false;
-
-// Гарантированная функция инициализации и мягкой миграции таблицы
-async function ensureDatabaseReady() {
-    if (isDbInitialized) return;
-    try {
-        // 1. Создаем таблицу, если её вообще не существовало
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS licenses (
-                id SERIAL PRIMARY KEY,
-                license_key VARCHAR(255) UNIQUE NOT NULL,
-                web_login VARCHAR(255) DEFAULT '—',
-                hwid VARCHAR(255),
-                expires_at TIMESTAMP,
-                is_banned BOOLEAN DEFAULT FALSE,
-                last_name VARCHAR(255) DEFAULT '—',
-                last_server VARCHAR(255) DEFAULT 'Оффлайн',
-                last_seen TIMESTAMP DEFAULT NOW()
-            );
-        `);
-
-        // 2. Мягкая миграция: проверяем и добавляем колонку web_login, если её нет
-        const checkLogin = await pool.query(`
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name='licenses' AND column_name='web_login';
-        `);
-        if (checkLogin.rows.length === 0) {
-            await pool.query(`ALTER TABLE licenses ADD COLUMN web_login VARCHAR(255) DEFAULT '—';`);
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAVGE PREMIUM CONTROL v2.2</title>
+    <style>
+        :root {
+            --bg-main: #0a0516;
+            --bg-card: #120924;
+            --bg-input: #1a0f33;
+            --primary: #8a2be2;
+            --primary-hover: #9d4edd;
+            --accent-green: #00f5d4;
+            --accent-red: #ff007f;
+            --text-main: #ffffff;
+            --text-muted: #a497c2;
+            --border: #2e1a4e;
         }
-
-        // 3. Мягкая миграция: проверяем и добавляем колонку is_banned, если её нет
-        const checkBanned = await pool.query(`
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name='licenses' AND column_name='is_banned';
-        `);
-        if (checkBanned.rows.length === 0) {
-            await pool.query(`ALTER TABLE licenses ADD COLUMN is_banned BOOLEAN DEFAULT FALSE;`);
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-main);
         }
+        body {
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            padding: 30px;
+            display: flex;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            align-self: flex-start;
+        }
+        #login-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        #login-screen {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(45deg, #ff007f, #8a2be2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 35px;
+        }
+        .control-panel {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            background: #170d2e;
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #3c1e6d;
+            margin-bottom: 35px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        select, input {
+            background: var(--bg-input);
+            color: #fff;
+            border: 1px solid #4a2785;
+            padding: 12px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            outline: none;
+            font-size: 14px;
+            transition: border 0.2s;
+            box-sizing: border-box;
+            height: 45px;
+        }
+        select:focus, input:focus {
+            border-color: var(--primary-hover);
+        }
+        button {
+            background: linear-gradient(135deg, var(--primary), #5b00b3);
+            color: white;
+            border: none;
+            padding: 0 28px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(138, 43, 226, 0.4);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: transparent;
+        }
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+        th {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        tr:hover {
+            background: rgba(138, 43, 226, 0.04);
+        }
+        .key-style {
+            font-family: 'Fira Code', monospace;
+            font-weight: 700;
+            color: #e0aaff;
+            background: #24123a;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #43236a;
+        }
+        .badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-online { background: rgba(0, 245, 212, 0.1); color: var(--accent-green); }
+        .badge-menu { background: rgba(138, 43, 226, 0.1); color: #b577ff; }
+        .badge-offline { background: rgba(255, 255, 255, 0.05); color: #888; }
+        .badge-banned { background: rgba(255, 0, 127, 0.1); color: var(--accent-red); }
+        
+        .action-btns {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .btn-small {
+            padding: 0 14px;
+            font-size: 12px;
+            border-radius: 6px;
+            height: 32px;
+        }
+        .btn-ban { background: #3a001c; color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .btn-ban:hover { background: var(--accent-red); color: #000; }
+        .btn-unban { background: #003a30; color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .btn-unban:hover { background: var(--accent-green); color: #000; }
+        .btn-extend { background: #22173d; color: #fff; border: 1px solid var(--primary); }
+        .btn-delete { background: #2b000a; color: #ff3366; border: 1px solid #ff3366; }
+        .btn-delete:hover { background: #ff3366; color: #000; }
+        
+        .custom-time-input {
+            width: 100px;
+            padding: 6px 10px;
+            height: 32px;
+            font-size: 12px;
+            background: var(--bg-input);
+            border: 1px solid #4a2785;
+            color: #fff;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
 
-        // 4. Фикс старого названия колонки (если ключ раньше хранился в колонке "key")
-        const checkLicenseKey = await pool.query(`
-            SELECT column_name FROM information_schema.columns 
-            WHERE table_name='licenses' AND column_name='license_key';
-        `);
-        if (checkLicenseKey.rows.length === 0) {
-            const oldKeyCheck = await pool.query(`
-                SELECT column_name FROM information_schema.columns 
-                WHERE table_name='licenses' AND column_name='key';
-            `);
-            if (oldKeyCheck.rows.length > 0) {
-                await pool.query(`ALTER TABLE licenses RENAME COLUMN "key" TO license_key;`);
-            } else {
-                await pool.query(`ALTER TABLE licenses ADD COLUMN license_key VARCHAR(255) UNIQUE;`);
+<!-- ПОЛНОЭКРАННЫЙ ОВЕРЛЕЙ АВТОРИЗАЦИИ -->
+<div id="login-wrapper">
+    <div id="login-screen">
+        <h1>RAVGE LOGIN</h1>
+        <p class="subtitle">Введите мастер-пароль панели</p>
+        <div class="input-group" style="margin-bottom: 20px;">
+            <input type="password" id="admin-pass" placeholder="Пароль администратора...">
+        </div>
+        <button onclick="login()" style="width: 100%;">Войти</button>
+    </div>
+</div>
+
+<!-- ОСНОВНАЯ ПАНЕЛЬ С КЛЮЧАМИ -->
+<div id="main-panel" class="container" style="display: none;">
+    <h1>RAVGE PREMIUM CONTROL</h1>
+    <p class="subtitle">Панель управления лицензиями • Разработчик ForTrilogy</p>
+
+    <div class="control-panel">
+        <div class="input-group">
+            <label>Срок действия лицензии</label>
+            <select id="duration" onchange="toggleMainCustomTime(this.value)">
+                <option value="7d">7 дней</option>
+                <option value="15d">15 дней</option>
+                <option value="30d">30 дней</option>
+                <option value="custom">Своё время...</option>
+            </select>
+        </div>
+        <div class="input-group" id="main-custom-time-group" style="display: none;">
+            <label>Кастомное время (например: 12h, 45d, 5m)</label>
+            <input type="text" id="main-custom-time" placeholder="Введи время...">
+        </div>
+        <button onclick="generateKey()">+ Создать лицензию</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Лицензионный ключ</th>
+                <th>Логин (Веб)</th>
+                <th>Ник в Minecraft</th>
+                <th>HWID привязка</th>
+                <th>Текущий Сервер</th>
+                <th>Окончание подписки</th>
+                <th>Действия / Продление / Удаление</th>
+            </tr>
+        </thead>
+        <tbody id="license-table">
+            <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Синхронизация данных...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    let sessionPassword = '';
+
+    function login() {
+        const pass = document.getElementById('admin-pass').value;
+        if (pass === 'coco2012coco!') {
+            sessionPassword = pass;
+            document.getElementById('login-wrapper').style.display = 'none';
+            document.getElementById('main-panel').style.display = 'block';
+            loadLicenses();
+            setInterval(loadLicenses, 5000);
+        } else {
+            alert('Неверный мастер-пароль панели!');
+        }
+    }
+
+    function toggleMainCustomTime(value) {
+        const group = document.getElementById('main-custom-time-group');
+        if (value === 'custom') {
+            group.style.display = 'flex';
+        } else {
+            group.style.display = 'none';
+        }
+    }
+
+    function toggleRowCustomTime(rowId, value) {
+        const select = document.getElementById(`extend-${rowId}`);
+        const input = document.getElementById(`custom-extend-${rowId}`);
+        if (value === 'custom') {
+            select.style.display = 'none';
+            input.style.display = 'inline-block';
+            input.focus();
+        }
+    }
+
+    async function generateKey() {
+        const durationSelect = document.getElementById('duration').value;
+        let durationVal = durationSelect;
+        
+        if (durationSelect === 'custom') {
+            durationVal = document.getElementById('main-custom-time').value.trim();
+            if (!durationVal) {
+                alert('Пожалуйста, введите кастомное время срока действия!');
+                return;
             }
         }
 
-        isDbInitialized = true;
-        console.log("База данных успешно проверена, миграции применены.");
-    } catch (err) { 
-        console.error("Ошибка инициализации БД:", err); 
-        throw err; 
+        try {
+            const response = await fetch('/api/admin/generate-license', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: sessionPassword, duration: durationVal, login: '—' })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert(`Лицензия создана!
+Ключ: ${data.key}`);
+                loadLicenses();
+            } else { alert(`Ошибка: ${data.error}`); }
+        } catch (err) { alert('Ошибка соединения с базой.'); }
     }
-}
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Универсальный парсер времени (поддерживает 7d, 15d, 30d)
-function parseTimeToMs(timeInput) {
-    const value = parseInt(timeInput);
-    if (isNaN(value)) return 30 * 24 * 60 * 60 * 1000;
-    const unit = timeInput.toString().toLowerCase().replace(/[0-9]/g, '').trim();
-    if (unit.includes('м') || unit === 'm') return value * 60 * 1000;
-    if (unit.includes('ч') || unit === 'h') return value * 60 * 60 * 1000;
-    if (unit.includes('д') || unit === 'd') return value * 24 * 60 * 60 * 1000;
-    return value * 24 * 60 * 60 * 1000;
-}
-
-// Генератор уникальных ключей формата XXXX-XXXX-XXXX-XXXX
-function generateRandomKey() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let key = '';
-    for (let i = 0; i < 16; i++) {
-        if (i > 0 && i % 4 === 0) key += '-';
-        key += chars.charAt(Math.floor(Math.random() * chars.length));
+    async function toggleBan(key, currentBanStatus) {
+        try {
+            const response = await fetch('/api/admin/ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: sessionPassword, key: key, ban: !currentBanStatus })
+            });
+            const data = await response.json();
+            if (data.success) loadLicenses();
+        } catch (e) { console.error(e); }
     }
-    return key;
-}
 
-app.get('/', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) {}
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// АВТОРИЗАЦИЯ АДМИНИСТРАТОРА НА ВЕБ-ПАНЕЛИ
-app.post('/api/admin/login', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database error' }); }
-    
-    if (req.body.password === ADMIN_PASSWORD) {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false, error: 'Неверный пароль' });
-    }
-});
-
-// ГЕНЕРАЦИЯ ЧИСТОГО КЛЮЧА
-app.post('/api/admin/generate-license', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database not ready' }); }
-    const { password, duration, login } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(401).json({ success: false, error: 'Запрещено' });
-
-    try {
-        const newKey = generateRandomKey();
-        const expiresAt = new Date(Date.now() + parseTimeToMs(duration));
-        await pool.query('INSERT INTO licenses (license_key, web_login, expires_at) VALUES ($1, $2, $3)', [newKey, login || '—', expiresAt]);
-        return res.json({ success: true, key: newKey });
-    } catch (err) { 
-        console.error(err);
-        return res.status(500).json({ success: false, error: 'Internal error' }); 
-    }
-});
-
-// ПОЛУЧЕНИЕ СПИСКА КЛЮЧЕЙ ДЛЯ ВЕБ-ТАБЛИЦЫ
-app.get('/api/admin/keys', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false }); }
-    try {
-        // Автоматом переводим в оффлайн тех, от кого не было верификации более 3 минут
-        const threshold = new Date(Date.now() - 3 * 60 * 1000);
-        await pool.query("UPDATE licenses SET last_server = 'Оффлайн' WHERE last_seen < $1 AND last_server != 'Оффлайн'", [threshold]);
+    async function extendKey(key, rowId) {
+        const select = document.getElementById(`extend-${rowId}`);
+        const input = document.getElementById(`custom-extend-${rowId}`);
         
-        const result = await pool.query('SELECT * FROM licenses ORDER BY id DESC');
-        return res.json({ success: true, licenses: result.rows });
-    } catch (err) { return res.status(500).json({ success: false }); }
-});
-
-// ЭНДПОИНТ БАНА / РАЗБАНА ПО КНОПКЕ
-app.post('/api/admin/ban', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false }); }
-    const { password, key, ban } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(401).json({ success: false, error: 'Invalid password' });
-
-    try {
-        await pool.query('UPDATE licenses SET is_banned = $1 WHERE license_key = $2', [ban, key]);
-        return res.json({ success: true });
-    } catch (e) { return res.status(500).json({ success: false }); }
-});
-
-// ЭНДПОИНТ ПРОДЛЕНИЯ СРОКА ЛИЦЕНЗИИ
-app.post('/api/admin/extend', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false }); }
-    const { password, key, duration } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(401).json({ success: false, error: 'Invalid password' });
-
-    try {
-        const licCheck = await pool.query('SELECT expires_at FROM licenses WHERE license_key = $1', [key]);
-        if (licCheck.rows.length === 0) return res.json({ success: false, error: 'Key not found' });
-        
-        let currentExpire = new Date(licCheck.rows[0].expires_at);
-        if (currentExpire < new Date()) currentExpire = new Date(); // Продлеваем от сегодняшнего дня, если уже просрочен
-
-        const newExpire = new Date(currentExpire.getTime() + parseTimeToMs(duration));
-        await pool.query('UPDATE licenses SET expires_at = $1 WHERE license_key = $2', [newExpire, key]);
-        return res.json({ success: true });
-    } catch (e) { return res.status(500).json({ success: false }); }
-});
-
-// ЭНДПОИНТ ДЛЯ ПОЛНОГО УДАЛЕНИЯ КЛЮЧА ИЗ БАЗЫ
-app.post('/api/admin/delete', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false }); }
-    const { password, key } = req.body;
-    if (password !== ADMIN_PASSWORD) return res.status(401).json({ success: false, error: 'Invalid password' });
-
-    try {
-        await pool.query('DELETE FROM licenses WHERE license_key = $1', [key]);
-        return res.json({ success: true });
-    } catch (e) { return res.status(500).json({ success: false }); }
-});
-
-// ВЕРИФИКАЦИЯ КЛИЕНТОМ (ВАШИМ МОДОМ/ЧИТОМ ИЗ MINECRAFT)
-app.get('/api/verify', async (req, res) => {
-    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false }); }
-    let { key, hwid, name, server, action } = req.query;
-    if (!key || !hwid) return res.json({ success: false, error: 'Missing parameters' });
-
-    key = key.trim().toUpperCase();
-    hwid = hwid.trim().toUpperCase();
-    let pName = name ? decodeURIComponent(name).trim() : '—';
-    
-    let currentStatus = 'В меню';
-    if (action === 'offline' || action === 'close') currentStatus = 'Оффлайн';
-    else if (server) {
-        const parsed = decodeURIComponent(server).trim();
-        if (parsed && parsed !== 'null') currentStatus = parsed;
-    }
-
-    try {
-        const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1', [key]);
-        if (result.rows.length === 0) return res.json({ success: false, error: 'License not found' });
-
-        // Жесткий фикс: берём именно объект строки из возвращаемого массива rows
-        const license = result.rows[0];
-
-        // 1. Проверка на бан
-        if (license.is_banned) {
-            return res.json({ success: false, error: 'You are banned from this cheat' });
-        }
-        
-        // 2. Проверка на соответствие HWID
-        if (license.hwid && license.hwid !== hwid) {
-            return res.json({ success: false, error: 'HWID mismatch' });
-        }
-        
-        // 3. Проверка срока окончания подписки
-        if (license.expires_at && new Date(license.expires_at) < new Date()) {
-            return res.json({ success: false, error: 'License expired' });
-        }
-
-        // 4. Запись сетевой активности и автоматическая привязка логина/ника при первом входе
-        if (!license.hwid || license.hwid === '') {
-            await pool.query('UPDATE licenses SET hwid = $1, last_name = $2, last_server = $3, last_seen = NOW() WHERE license_key = $4', [hwid, pName, currentStatus, key]);
+        let durationVal = '';
+        if (select.style.display === 'none') {
+            durationVal = input.value.trim();
+            if (!durationVal) {
+                alert('Введите кастомное время для продления подписки!');
+                return;
+            }
         } else {
-            await pool.query('UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3', [pName, currentStatus, key]);
+            durationVal = select.value;
         }
 
-        return res.json({ success: true, message: 'Active' });
-    } catch (err) { 
-        console.error(err);
-        return res.status(500).json({ success: false }); 
+        try {
+            const response = await fetch('/api/admin/extend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: sessionPassword, key: key, duration: durationVal })
+            });
+            const data = await response.json();
+            if (data.success) { 
+                alert('Время подписки успешно обновлено!'); 
+                loadLicenses(); 
+            } else {
+                alert(`Ошибка продления: ${data.error}`);
+            }
+        } catch (e) { console.error(e); }
     }
-});
 
-app.listen(PORT, () => console.log(`Бэкенд успешно запущен на порту ${PORT}`));
+    async function deleteKey(key) {
+        if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы данных?')) return;
+        
+        try {
+            const response = await fetch('/api/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: sessionPassword, key: key })
+            });
+            const data = await response.json();
+            if (data.success) {
+                loadLicenses();
+            } else {
+                alert(`Ошибка удаления: ${data.error}`);
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function loadLicenses() {
+        try {
+            const response = await fetch('/api/admin/keys');
+            const data = await response.json();
+            const tableBody = document.getElementById('license-table');
+            if (!tableBody) return;
+
+            // Сохраняем текущие значения открытых кастомных инпутов, чтобы они не сбрасывались при обновлении
+            const activeCustomValues = {};
+            tableBody.querySelectorAll('.custom-time-input').forEach(input => {
+                if (input.style.display === 'inline-block') {
+                    activeCustomValues[input.dataset.rowId] = input.value;
+                }
+            });
+
+            tableBody.innerHTML = '';
+            const licenses = data.licenses || [];
+
+            if (licenses.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Ключей в базе данных не обнаружено</td></tr>`;
+                return;
+            }
+
+            licenses.forEach(lic => {
+                const row = document.createElement('tr');
+                const expireDate = lic.expires_at ? new Date(lic.expires_at).toLocaleString('ru-RU') : 'Истекла';
+                
+                let serverBadge = `<span class="badge badge-offline">Оффлайн</span>`;
+                if (lic.is_banned) {
+                    serverBadge = `<span class="badge badge-banned">Забанен</span>`;
+                } else if (lic.last_server === 'В меню') {
+                    serverBadge = `<span class="badge badge-menu">В меню</span>`;
+                } else if (lic.last_server && lic.last_server !== 'Оффлайн') {
+                    serverBadge = `<span class="badge badge-online">${lic.last_server}</span>`;
+                }
+
+                const banBtn = lic.is_banned 
+                    ? `<button class="btn-small btn-unban" onclick="toggleBan('${lic.license_key.replace(/'/g, "\\'")}', true)">Разбанить</button>`
+                    : `<button class="btn-small btn-ban" onclick="toggleBan('${lic.license_key.replace(/'/g, "\\'")}', false)">Забанить</button>`;
+
+                const selectId = `extend-${lic.id}`;
+                const inputId = `custom-extend-${lic.id}`;
+                const wasCustomActive = activeCustomValues[lic.id] !== undefined;
+
+                row.innerHTML = `
+                    <td>${lic.id}</td>
+                    <td><span class="key-style">${lic.license_key}</span></td>
+                    <td style="font-weight: bold; color: #fff;">${lic.web_login || '—'}</td>
+                    <td style="color: #00f5d4; font-weight: 500;">${lic.last_name || '—'}</td>
+                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${lic.hwid || 'Свободно'}</td>
+                    <td>${serverBadge}</td>
+                    <td>${expireDate}</td>
+                    <td>
+                        <div class="action-btns">
+                            ${banBtn}
+                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842; display: ${wasCustomActive ? 'none' : 'inline-block'};" onchange="toggleRowCustomTime(${lic.id}, this.value)">
+                                <option value="7d">+7д</option>
+                                <option value="15d">+15д</option>
+                                <option value="30d">+30д</option>
+                                <option value="custom">Своё время...</option>
+                            </select>
+                            <input type="text" id="${inputId}" class="custom-time-input" data-row-id="${lic.id}" placeholder="12h, 5m, 3d" style="display: ${wasCustomActive ? 'inline-block' : 'none'};" value="${wasCustomActive ? activeCustomValues[lic.id] : ''}">
+                            <button class="btn-small btn-extend" onclick="extendKey('${lic.license_key.replace(/'/g, "\\'")}', ${lic.id})">Продлить</button>
+                            <button class="btn-small btn-delete" onclick="deleteKey('${lic.license_key.replace(/'/g, "\\'")}')">Удалить</button>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } catch (err) { console.error(err); }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Проверяем, если пароль уже был введен ранее в сессии
+        if (sessionPassword === 'coco2012coco!') {
+            document.getElementById('login-wrapper').style.display = 'none';
+            document.getElementById('main-panel').style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>
