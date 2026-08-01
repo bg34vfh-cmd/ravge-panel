@@ -5,205 +5,231 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RAVGE PREMIUM Admin Panel</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
-        body { background: #0b0b0e; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
-        .container { width: 100%; max-width: 1300px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
-        h1 { font-size: 28px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; }
-        h1 span { color: #a855f7; }
-        .subtitle { color: #71717a; font-size: 14px; margin-bottom: 25px; }
-        .generator-block { display: flex; align-items: center; gap: 10px; background: #161622; padding: 15px; border-radius: 8px; margin-bottom: 25px; border: 1px solid #2e1052; }
-        select, input { background: #1c1c28; color: #fff; border: 1px solid #4c1d95; padding: 10px; border-radius: 6px; font-size: 14px; outline: none; }
-        select:focus, input:focus { border-color: #a855f7; }
-        .btn { background: #581c87; color: #fff; border: none; padding: 11px 22px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(88, 28, 135, 0.3); }
-        .btn:hover { background: #7024ab; transform: translateY(-1px); }
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
-        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-        tr { border-bottom: 1px solid #1f1f2e; }
-        tr:hover { background: #1b1b26; }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
-        .status.active { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
-        .status.banned { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-        .badge { background: #27272a; padding: 2px 6px; border-radius: 4px; font-size: 11px; color: #d4d4d8; }
-        .action-container { display: flex; align-items: center; gap: 5px; }
-        .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
-        .action-btn.ban { border-color: #ef4444; color: #f87171; }
-        .action-btn.ban:hover { background: #ef4444; color: #fff; }
-        .action-btn.unban { border-color: #22c55e; color: #4ade80; }
-        .action-btn.unban:hover { background: #22c55e; color: #fff; }
-        .action-btn.del { border-color: #71717a; color: #e4e4e7; }
-        .action-btn.del:hover { background: #991b1b; color: #fff; border-color: #ef4444; }
-        .action-btn.ext { border-color: #a855f7; color: #c084fc; font-weight: bold; }
-        .action-btn.ext:hover { background: #a855f7; color: #fff; }
-        .time { font-family: monospace; color: #c084fc; font-weight: bold; }
-        .hwid-text { font-family: monospace; font-size: 11px; color: #71717a; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        
-        .status-menu { color: #a855f7; font-weight: 500; }
-        .status-single { color: #60a5fa; font-weight: 500; }
-        .status-offline { color: #71717a; font-style: italic; }
+        body {
+            background-color: #0b0713;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background: #130d22;
+            border: 1px solid #2d1b4e;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            font-size: 24px;
+            color: #bb86fc;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        p.subtitle {
+            color: #8a7aab;
+            font-size: 14px;
+            margin-top: 0;
+            margin-bottom: 30px;
+        }
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: #1b1230;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #3d2766;
+            margin-bottom: 30px;
+        }
+        label {
+            color: #e0d4f7;
+            font-size: 14px;
+        }
+        select {
+            background: #0b0713;
+            color: #fff;
+            border: 1px solid #52348c;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            outline: none;
+            font-size: 14px;
+        }
+        button {
+            background: #6200ee;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #7f39fb;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            background: #130d22;
+        }
+        th, td {
+            padding: 14px;
+            text-align: left;
+            border-bottom: 1px solid #2d1b4e;
+            font-size: 14px;
+        }
+        th {
+            color: #8a7aab;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        tr:hover {
+            background: rgba(98, 0, 238, 0.05);
+        }
+        .key-style {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            color: #cf6679;
+            background: #25163a;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .online-badge {
+            color: #03dac6;
+            font-weight: bold;
+        }
+        .offline-badge {
+            color: #666666;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>RAVGE <span>PREMIUM</span> CONTROL</h1>
-    <div class="subtitle">Разработчик: Forthbxr | Полное управление Neon БД</div>
-    
-    <div class="generator-block">
-        <span style="font-size: 14px; font-weight: bold; color: #c084fc;">🔑 Создать ключ на:</span>
-        <select id="gen-time-select" onchange="toggleCustomInput('gen-time-select', 'gen-custom-time')">
+    <h1>RAVGE PREMIUM CONTROL</h1>
+    <p class="subtitle">Разработано ForTrilogy | Полное управление Neon БД</p>
+
+    <div class="control-panel">
+        <label for="duration">🔑 Создать ключ на:</label>
+        <select id="duration">
             <option value="7d">7 дней</option>
             <option value="15d">15 дней</option>
-            <option value="30d" selected>30 дней</option>
-            <option value="custom">Кастомное время...</option>
+            <option value="30d">30 дней</option>
         </select>
-        <input type="text" id="gen-custom-time" placeholder="Пример: 5 мин, 2 час, 1 д" style="display: none; width: 220px;">
-        <button class="btn" onclick="generateKey()">⚡ Сгенерировать ключ</button>
+        <button onclick="generateKey()">+ Сгенерировать ключ</button>
     </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Лицензионный Ключ</th>
-                    <th>Пользователь (Логин)</th>
-                    <th>HWID привязка</th>
-                    <th>Сервер</th>
-                    <th>Окончание подписки</th>
-                    <th>Статус</th>
-                    <th>Действия управления</th>
-                </tr>
-            </thead>
-            <tbody id="keys-table-body"></tbody>
-        </table>
-    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Лицензионный ключ</th>
+                <th>Пользователь (Логин)</th>
+                <th>HWID привязка</th>
+                <th>Сервер</th>
+                <th>Окончание подписки</th>
+                <th>Статус</th>
+            </tr>
+        </thead>
+        <tbody id="license-table">
+            <tr>
+                <td colspan="7" style="text-align: center; color: #8a7aab; padding: 30px;">Загрузка данных...</td>
+            </tr>
+        </tbody>
+    </table>
 </div>
 
 <script>
-    let isUpdating = false;
+    // Функция создания ключа
+    async function generateKey() {
+        const durationElement = document.getElementById('duration');
+        const durationValue = durationElement ? durationElement.value : '30d';
 
-    function toggleCustomInput(selectId, inputId) {
-        const select = document.getElementById(selectId);
-        const input = document.getElementById(inputId);
-        input.style.display = select.value === 'custom' ? 'inline-block' : 'none';
-    }
-
-    async function sendRequest(url, body = null) {
-        const options = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
-        const res = await fetch(url, options);
-        return await res.json();
-    }
-
-    async function loadKeys() {
-        if (isUpdating) return;
-        isUpdating = true;
         try {
-            const data = await sendRequest('/api/admin/keys');
-            if (!data.success) {
-                isUpdating = false;
-                return;
-            }
-
-            const tbody = document.getElementById('keys-table-body');
-            tbody.innerHTML = '';
-
-            data.keys.forEach(item => {
-                const tr = document.createElement('tr');
-                let expiresStr = item.expires_at > 0 ? new Date(Number(item.expires_at)).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Не активирован';
-                
-                let userDisplay = '';
-                let serverDisplay = '';
-
-                const isOffline = item.player_name && item.player_name.includes('[Офлайн]');
-
-                if (isOffline) {
-                    userDisplay = `<span class="status-offline">${item.player_name}</span>`;
-                    serverDisplay = `<span class="status-offline">—</span>`;
-                } else {
-                    let nick = item.player_name || '—';
-                    userDisplay = `<span style="color: #60a5fa; font-weight: 500;">${nick}</span>`;
-                    
-                    let serverVal = item.server_ip || '—';
-                    if (serverVal === 'В меню') {
-                        serverDisplay = `<span class="status-menu">🟣 В меню</span>`;
-                    } else if (serverVal === 'Одиночная игра') {
-                        serverDisplay = `<span class="status-single">🔷 Одиночная игра</span>`;
-                    } else if (serverVal === '—') {
-                        serverDisplay = `<span style="color: #71717a;">—</span>`;
-                    } else {
-                        serverDisplay = `<span style="color: #fbbf24; font-weight: 500;">${serverVal}</span>`;
-                    }
-                }
-
-                let btnClass = item.status === 'active' ? 'ban' : 'unban';
-                let btnText = item.status === 'active' ? 'Бан' : 'Разбан';
-
-                tr.innerHTML = `
-                    <td><span class="badge">#${item.id}</span></td>
-                    <td style="font-weight: bold; color: #fff;">${item.key}</td>
-                    <td>${userDisplay}</td>
-                    <td><div class="hwid-text" title="${item.hwid || 'Нет'}">${item.hwid || '—'}</div></td>
-                    <td style="font-size: 12px;">${serverDisplay}</td>
-                    <td class="time">${expiresStr}</td>
-                    <td><span class="status ${item.status}">${item.status === 'active' ? 'ACTIVE' : 'BANNED'}</span></td>
-                    <td>
-                        <div class="action-container">
-                            <select id="ext-select-${item.id}" style="padding: 5px; font-size: 12px;" onchange="toggleCustomInput('ext-select-${item.id}', 'ext-custom-${item.id}')">
-                                <option value="1h">1 час</option>
-                                <option value="1d">1 день</option>
-                                <option value="7d">7 дней</option>
-                                <option value="30d" selected>30 дней</option>
-                                <option value="custom">Кастом...</option>
-                            </select>
-                            <input type="text" id="ext-custom-${item.id}" placeholder="1 мин / 5 час" style="display: none; padding: 5px; font-size: 12px; width: 90px;">
-                            <button class="action-btn ext" onclick="extendKey(${item.id})">➕ Продлить</button>
-                            <button class="action-btn ${btnClass}" onclick="toggleStatus(${item.id})">${btnText}</button>
-                            <button class="action-btn del" onclick="deleteKey(${item.id})">Удалить</button>
-                        </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+            const response = await fetch('/api/admin/generate-license', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    password: 'coco2012coco!', // Сверяется с сервером
+                    duration: durationValue
+                })
             });
-        } catch (e) {
-            console.error("Ошибка загрузки ключей:", e);
-        } finally {
-            isUpdating = false;
+
+            const data = await response.json();
+
+            if (data.success) {
+                alert(`Ключ успешно создан и сохранен!\n\n${data.key}`);
+                loadLicenses(); // Обновляем таблицу на экране
+            } else {
+                alert(`Ошибка: ${data.error || 'Не удалось сгенерировать ключ'}`);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Сетевая ошибка при генерации ключа');
         }
     }
 
-    async function generateKey() {
-        const select = document.getElementById('gen-time-select');
-        const customInput = document.getElementById('gen-custom-time');
-        const timeInput = select.value === 'custom' ? customInput.value : select.value;
-        const data = await sendRequest('/api/admin/generate-license', { timeInput });
-        if (data.success) loadKeys();
+    // Функция загрузки списка ключей
+    async function loadLicenses() {
+        try {
+            const response = await fetch('/api/admin/keys');
+            const data = await response.json();
+
+            const tableBody = document.getElementById('license-table');
+            if (!tableBody) return;
+
+            tableBody.innerHTML = '';
+
+            const licenses = data.licenses || [];
+
+            if (licenses.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #8a7aab; padding: 30px;">Ключей в базе данных не обнаружено</td></tr>`;
+                return;
+            }
+
+            licenses.forEach(lic => {
+                const row = document.createElement('tr');
+                
+                const formattedDate = lic.expires_at 
+                    ? new Date(lic.expires_at).toLocaleString('ru-RU') 
+                    : 'Бессрочно';
+
+                const isOnline = lic.last_server && lic.last_server !== 'Оффлайн';
+                const statusHtml = isOnline 
+                    ? `<span class="online-badge">● В игре</span>` 
+                    : `<span class="offline-badge">● Оффлайн</span>`;
+
+                row.innerHTML = `
+                    <td>${lic.id}</td>
+                    <td><span class="key-style">${lic.license_key}</span></td>
+                    <td>${lic.last_name || '—'}</td>
+                    <td style="font-size: 12px; color: #a497c2;">${lic.hwid || 'Не привязан'}</td>
+                    <td>${lic.last_server || '—'}</td>
+                    <td>${formattedDate}</td>
+                    <td>${statusHtml}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        } catch (err) {
+            console.error('Ошибка загрузки данных:', err);
+        }
     }
 
-    async function toggleStatus(id) {
-        const data = await sendRequest('/api/admin/toggle-status', { id });
-        if (data.success) loadKeys();
-    }
-
-    async function deleteKey(id) {
-        if (!confirm("Удалить этот ключ навсегда?")) return;
-        const data = await sendRequest('/api/admin/delete', { id });
-        if (data.success) loadKeys();
-    }
-
-    async function extendKey(id) {
-        const select = document.getElementById(`ext-select-${id}`);
-        const customInput = document.getElementById(`ext-custom-${id}`);
-        const timeInput = select.value === 'custom' ? customInput.value : select.value;
-        const data = await sendRequest('/api/admin/extend', { id, timeInput });
-        if (data.success) loadKeys();
-    }
-
-    window.onload = () => {
-        loadKeys();
-        setInterval(loadKeys, 3000);
-    };
+    // Запуск автообновления таблицы каждые 10 секунд
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLicenses();
+        setInterval(loadLicenses, 10000);
+    });
 </script>
+
 </body>
 </html>
