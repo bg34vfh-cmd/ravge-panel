@@ -17,7 +17,6 @@ function parseTimeToMs(timeInput) {
     if (!timeInput) return 30 * 24 * 60 * 60 * 1000;
     const value = parseInt(timeInput) || 30;
     const unit = timeInput.toString().toLowerCase().replace(/[0-9]/g, '').trim();
-    
     if (unit === 'm' || unit === 'мин') return value * 60 * 1000;
     if (unit === 'h' || unit === 'ч') return value * 60 * 60 * 1000;
     if (unit === 'd' || unit === 'д' || unit === 'дней') return value * 24 * 60 * 60 * 1000;
@@ -28,15 +27,12 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ПРОВЕРКА ПАРОЛЯ АДМИНКИ СЕРВЕРОМ
 app.post('/api/admin/login', (req, res) => {
-    if (req.body.password === 'coco2012coco!') {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false });
-    }
+    if (req.body.password === 'coco2012coco!') res.json({ success: true });
+    else res.json({ success: false });
 });
 
+// МОДЕРНИЗИРОВАННАЯ ПРОВЕРКА: Жесткий сброс при бане
 app.get('/api/verify', (req, res) => {
     let { key, hwid, name, server } = req.query;
     if (!key || !hwid) return res.send('{"success":false}');
@@ -46,9 +42,14 @@ app.get('/api/verify', (req, res) => {
     const sIp = server ? decodeURIComponent(server) : '—';
 
     let row = licenses.find(l => l.key === key);
-    if (!row) return res.send('{"success":false}');
+    
+    // Если ключ забанен — мгновенно шлём ложь и сбрасываем сессию, чтобы чит сразу отключился!
+    if (!row || row.status !== 'active') {
+        if (row) { row.player_name = "ЗАБАНЕН"; row.server_ip = "—"; }
+        return res.send('{"success":false}');
+    }
+    
     if (row.banned_until && row.banned_until > Date.now()) return res.send(`{"success":false,"banned":true,"until":${row.banned_until}}`);
-    if (row.status !== 'active') return res.send('{"success":false}');
 
     if (row.type === 'license' && row.expires_at === 0) {
         row.expires_at = Date.now() + row.duration_ms;
@@ -75,7 +76,6 @@ app.post('/api/admin/generate-license', (req, res) => {
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
     const newKey = `${genPart()}-${genPart()}-${genPart()}-${genPart()}`;
     const newId = licenses.length > 0 ? licenses[licenses.length - 1].id + 1 : 1;
-    
     const addMs = parseTimeToMs(timeInput);
 
     licenses.push({
@@ -88,15 +88,10 @@ app.post('/api/admin/generate-license', (req, res) => {
 app.post('/api/admin/extend', (req, res) => {
     const targetId = parseInt(req.body.id);
     const addMs = parseTimeToMs(req.body.timeInput);
-
     let row = licenses.find(l => l.id === targetId);
     if (row) {
-        if (row.expires_at === 0) {
-            row.duration_ms += addMs;
-        } else {
-            let baseTime = row.expires_at < Date.now() ? Date.now() : row.expires_at;
-            row.expires_at = baseTime + addMs;
-        }
+        if (row.expires_at === 0) row.duration_ms += addMs;
+        else row.expires_at = (row.expires_at < Date.now() ? Date.now() : row.expires_at) + addMs;
         return res.json({ success: true });
     }
     res.json({ success: false });
@@ -107,11 +102,17 @@ app.post('/api/admin/delete', (req, res) => {
     res.json({ success: true });
 });
 
+// ИСПРАВЛЕНО НА 100%: Принудительный сброс параметров авторизации при клике
 app.post('/api/admin/toggle-status', (req, res) => {
     const targetId = parseInt(req.body.id);
     let row = licenses.find(l => l.id === targetId);
     if (row) {
         row.status = row.status === 'active' ? 'banned' : 'active';
+        if (row.status === 'banned') {
+            row.player_name = "БАН-ОФЛАЙН";
+            row.server_ip = "—";
+            row.hwid = null; // Сбрасываем HWID, чтобы ключ стал "чистым" после разбана
+        }
         return res.json({ success: true });
     }
     res.json({ success: false });
