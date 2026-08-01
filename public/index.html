@@ -44,7 +44,7 @@
             align-items: center;
             z-index: 9999;
         }
-        #login-screen {
+        .login-card {
             width: 100%;
             max-width: 400px;
             background: var(--bg-card);
@@ -53,7 +53,6 @@
             border: 1px solid var(--border);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
             text-align: center;
-            box-sizing: border-box;
         }
         .container {
             width: 100%;
@@ -186,24 +185,24 @@
             font-size: 12px;
             border-radius: 6px;
             text-transform: none;
-            letter-spacing: 0;
+            letter-spacing: normal;
             font-weight: 600;
         }
         .btn-ban { background: #3a001c; color: var(--accent-red); border: 1px solid var(--accent-red); }
-        .btn-ban:hover { background: var(--accent-red); color: #000; transform: none; box-shadow: none; }
+        .btn-ban:hover { background: var(--accent-red); color: #000; transform: none; box-shadow: none;}
         .btn-unban { background: #003a30; color: var(--accent-green); border: 1px solid var(--accent-green); }
-        .btn-unban:hover { background: var(--accent-green); color: #000; transform: none; box-shadow: none; }
+        .btn-unban:hover { background: var(--accent-green); color: #000; transform: none; box-shadow: none;}
         .btn-extend { background: #22173d; color: #fff; border: 1px solid var(--primary); }
         .btn-extend:hover { transform: none; box-shadow: none; background: var(--primary); }
         .btn-delete { background: #2b000a; color: #ff3366; border: 1px solid #ff3366; }
-        .btn-delete:hover { background: #ff3366; color: #000; transform: none; box-shadow: none; }
+        .btn-delete:hover { background: #ff3366; color: #000; transform: none; box-shadow: none;}
     </style>
 </head>
 <body>
 
-<!-- ЭКРАН АВТОРИЗАЦИИ НА ВЕСЬ ЭКРАН -->
+<!-- ПОЛНОЭКРАННЫЙ ОВЕРЛЕЙ АВТОРИЗАЦИИ -->
 <div id="login-wrapper">
-    <div id="login-screen">
+    <div class="login-card">
         <h1>RAVGE LOGIN</h1>
         <p class="subtitle">Введите мастер-пароль панели</p>
         <div class="input-group" style="margin-bottom: 20px;">
@@ -220,14 +219,14 @@
 
     <div class="control-panel">
         <div class="input-group">
-            <label>Срок действия</label>
+            <label>Срок действия лицензии</label>
             <select id="duration">
                 <option value="7d">7 дней</option>
                 <option value="15d">15 дней</option>
                 <option value="30d">30 дней</option>
             </select>
         </div>
-        <button onclick="generateKey()" style="margin-top: 16px;">+ Создать чистую лицензию</button>
+        <button onclick="generateKey()" style="margin-top: 16px;">+ Создать лицензию</button>
     </div>
 
     <table>
@@ -261,7 +260,7 @@
             document.getElementById('login-wrapper').style.display = 'none';
             document.getElementById('main-panel').style.display = 'block';
             loadLicenses();
-            setInterval(loadLicenses, 5000); 
+            setInterval(loadLicenses, 5000); // Быстрое обновление каждые 5 сек
         } else {
             alert('Неверный мастер-пароль панели!');
         }
@@ -278,60 +277,79 @@
             });
             const data = await response.json();
             if (data.success) {
-                alert(`Лицензия успешно создана!\nКлюч: ${data.key}`);
+                alert(`Лицензия создана!
+Ключ: ${data.key}`);
                 loadLicenses();
-            } else { alert(`Ошибка: ${data.error}`); }
+            } else { alert(`Ошибка: ${data.error || 'Не удалось создать ключ'}`); }
         } catch (err) { alert('Ошибка соединения с базой.'); }
     }
 
-    async function toggleBan(licenseKey, currentBanStatus) {
+    async function toggleBan(key, currentBanStatus) {
         try {
             const response = await fetch('/api/admin/ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: licenseKey, ban: !currentBanStatus })
+                body: JSON.stringify({ password: sessionPassword, key: key, ban: !currentBanStatus })
             });
+            
+            if (response.status === 404) {
+                alert('Ошибка 404: Эндпоинт "/api/admin/ban" отсутствует на вашем текущем сервере.');
+                return;
+            }
+            
             const data = await response.json();
             if (data.success) {
                 loadLicenses();
             } else {
-                alert('Ошибка изменения статуса бана');
+                alert(`Ошибка изменения статуса бана: ${data.error || 'Действие отклонено бэкендом'}`);
             }
         } catch (e) { console.error(e); }
     }
 
-    async function extendKey(licenseKey, selectId) {
+    async function extendKey(key, selectId) {
         const duration = document.getElementById(selectId).value;
         try {
             const response = await fetch('/api/admin/extend', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: licenseKey, duration: duration })
+                body: JSON.stringify({ password: sessionPassword, key: key, duration: duration })
             });
+            
+            if (response.status === 404) {
+                alert('Ошибка 404: Эндпоинт "/api/admin/extend" отсутствует на вашем текущем сервере.');
+                return;
+            }
+            
             const data = await response.json();
             if (data.success) { 
                 alert('Время успешно добавлено к лицензии!'); 
                 loadLicenses(); 
             } else {
-                alert('Ошибка продления лицензии');
+                alert(`Ошибка продления: ${data.error || 'Действие отклонено бэкендом'}`);
             }
         } catch (e) { console.error(e); }
     }
 
-    async function deleteKey(licenseKey) {
+    async function deleteKey(key) {
         if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы данных?')) return;
         
         try {
             const response = await fetch('/api/admin/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: licenseKey })
+                body: JSON.stringify({ password: sessionPassword, key: key })
             });
+            
+            if (response.status === 404) {
+                alert('Ошибка 404: Эндпоинт удаления "/api/admin/delete" отсутствует на вашем текущем сервере. Кнопка не может выполнить действие.');
+                return;
+            }
+            
             const data = await response.json();
             if (data.success) {
                 loadLicenses();
             } else {
-                alert(`Ошибка удаления: ${data.error || 'эндпоинт удаления не поддерживается вашим сервером'}`);
+                alert(`Ошибка удаления: ${data.error || 'Действие отклонено бэкендом'}`);
             }
         } catch (e) { console.error(e); }
     }
@@ -344,21 +362,22 @@
             if (!tableBody) return;
             tableBody.innerHTML = '';
 
-            const list = data.licenses || [];
-            if (list.length === 0) {
+            const licenses = data.licenses || [];
+
+            if (licenses.length === 0) {
                 tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Ключей в базе данных не обнаружено</td></tr>`;
                 return;
             }
 
-            list.forEach(lic => {
+            licenses.forEach(lic => {
                 const row = document.createElement('tr');
                 
-                // Поддержка разных названий колонок (совместимость)
-                const licenseKey = lic.license_key || lic.key || '';
+                // Адаптивное чтение полей под любые версии бэкенда (старые/новые колонки БД)
+                const licenseKey = lic.license_key || lic.key || '—';
                 const webLogin = lic.web_login || '—';
-                const minecraftName = lic.last_name || '—';
+                const minecraftNick = lic.last_name || '—';
                 const hwidVal = lic.hwid || 'Свободно';
-                const currentServer = lic.last_server || lic.server || 'Оффлайн';
+                const serverVal = lic.last_server || lic.server || 'Оффлайн';
                 const isBanned = lic.is_banned || lic.banned || false;
                 
                 const expireDate = lic.expires_at ? new Date(lic.expires_at).toLocaleString('ru-RU') : 'Истекла';
@@ -366,14 +385,14 @@
                 let serverBadge = `<span class="badge badge-offline">Оффлайн</span>`;
                 if (isBanned) {
                     serverBadge = `<span class="badge badge-banned">Забанен</span>`;
-                } else if (currentServer === 'В меню') {
+                } else if (serverVal === 'В меню') {
                     serverBadge = `<span class="badge badge-menu">В меню</span>`;
-                } else if (currentServer && currentServer !== 'Оффлайн') {
-                    serverBadge = `<span class="badge badge-online">${currentServer}</span>`;
+                } else if (serverVal && serverVal !== 'Оффлайн') {
+                    serverBadge = `<span class="badge badge-online">${serverVal}</span>`;
                 }
 
-                // Исправлено: экранируем кавычки для безопасного вызова функций с текстовым аргументом ключа
-                const escapedKey = licenseKey.replace(/'/g, "\\'");
+                // Экранируем ключ для безопасной передачи аргументов в инлайн onClick функции кнопок
+                const escapedKey = licenseKey.replace(/'/g, "\'");
 
                 const banBtn = isBanned 
                     ? `<button class="btn-small btn-unban" onclick="toggleBan('${escapedKey}', true)">Разбанить</button>`
@@ -385,14 +404,14 @@
                     <td>${lic.id}</td>
                     <td><span class="key-style">${licenseKey}</span></td>
                     <td style="font-weight: bold; color: #fff;">${webLogin}</td>
-                    <td style="color: #00f5d4; font-weight: 500;">${minecraftName}</td>
+                    <td style="color: #00f5d4; font-weight: 500;">${minecraftNick}</td>
                     <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${hwidVal}</td>
                     <td>${serverBadge}</td>
                     <td>${expireDate}</td>
                     <td>
                         <div class="action-btns">
                             ${banBtn}
-                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842; border-color: #4a2785;">
+                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842;">
                                 <option value="7d">+7д</option>
                                 <option value="15d">+15д</option>
                                 <option value="30d">+30д</option>
