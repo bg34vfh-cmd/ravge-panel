@@ -36,7 +36,10 @@ app.post('/api/admin/login', (req, res) => {
     else res.json({ success: false });
 });
 
-// Проверка лицензии и авторизация
+// ==========================================
+// МАРШРУТ ДЛЯ КЛИЕНТА (ПРОВЕРКА В ИГРЕ)
+// ==========================================
+
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server, action, login, password } = req.query;
     if (!key || !hwid) return res.json({ success: false, error: 'Переданы не все параметры' });
@@ -56,7 +59,6 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'Ключ не найден в базе данных' });
         }
 
-        // ИСПРАВЛЕНО: Получаем первый элемент из массива строк
         let row = result.rows[0];
 
         // 1. Проверка блокировки ключа
@@ -77,7 +79,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'Срок действия вашей лицензии истёк' });
         }
 
-        // 4. Проверка HWID привязки (с защитой от null)
+        // 4. Проверка HWID привязки
         if (row.hwid && row.hwid.toString().trim().toUpperCase() !== hwid) {
             return res.json({ success: false, error: 'Ошибка авторизации: несовпадение HWID' });
         }
@@ -97,7 +99,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: true, need_register: true });
         }
 
-        // 7. ЗАЩИТА: Проверяем авторизационные данные (если это обычный вход-проверка)
+        // 7. ЗАЩИТА: Проверяем авторизационные данные
         const dbLogin = row.login ? row.login.toString().trim() : '';
         const dbPassword = row.password ? row.password.toString().trim() : '';
         
@@ -118,7 +120,6 @@ app.get('/api/verify', async (req, res) => {
         }
 
         // 9. Финальное обновление информации о сессии в базе
-        // В player_name теперь пишется чистый ник, логин хранится отдельно.
         await pool.query(
             'UPDATE keys SET hwid = $1, player_name = $2, server_ip = $3, last_seen = $4 WHERE key = $5', 
             [hwid, pName, finalServerField, Date.now(), key]
@@ -132,8 +133,22 @@ app.get('/api/verify', async (req, res) => {
     }
 });
 
-// === АДМИН-МАРШРУТЫ УПРАВЛЕНИЯ ===
+// ==========================================
+// АДМИН-МАРШРУТЫ УПРАВЛЕНИЯ ПАНЕЛЬЮ
+// ==========================================
 
+// ИСПРАВЛЕНО: Добавлен роут получения списка всех ключей для таблицы фронтенда
+app.get('/api/admin/keys', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM keys ORDER BY id DESC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Ошибка получения списка ключей:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Генерация новой лицензии
 app.post('/api/admin/generate-license', async (req, res) => {
     const { timeInput } = req.body;
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -151,6 +166,7 @@ app.post('/api/admin/generate-license', async (req, res) => {
     }
 });
 
+// Продление лицензии по ID
 app.post('/api/admin/extend', async (req, res) => {
     const targetId = parseInt(req.body.id);
     const addMs = parseTimeToMs(req.body.timeInput);
@@ -158,7 +174,7 @@ app.post('/api/admin/extend', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM keys WHERE id = $1', [targetId]);
         if (result.rows.length > 0) {
-            let row = result.rows[0]; // Исправлено получение строки
+            let row = result.rows[0]; 
             let newExpires = 0;
             let newDuration = Number(row.duration_ms);
 
@@ -178,9 +194,18 @@ app.post('/api/admin/extend', async (req, res) => {
     }
 });
 
+// Удаление ключа по ID
 app.post('/api/admin/delete', async (req, res) => {
+    const targetId = parseInt(req.body.id);
+    if (isNaN(targetId)) {
+        return res.json({ success: false, error: 'Некорректный ID ключа' });
+    }
+    
     try {
-        await pool.query('DELETE FROM keys WHERE id = $1', [parseInt(req.body.id)]);
+        const result = await pool.query('DELETE FROM keys WHERE id = $1', [targetId]);
+        if (result.rowCount === 0) {
+            return res.json({ success: false, error: 'Ключ с таким ID не найден в базе' });
+        }
         res.json({ success: true });
     } catch (err) {
         res.json({ success: false, error: err.message });
