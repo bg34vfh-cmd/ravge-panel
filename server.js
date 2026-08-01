@@ -5,9 +5,14 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Подключение к Neon PostgreSQL
+// Умное подключение к Neon PostgreSQL с глушением варнингов SSL
+let dbUrl = process.env.DATABASE_URL;
+if (dbUrl && !dbUrl.includes('sslmode=')) {
+    dbUrl += dbUrl.includes('?') ? '&sslmode=verify-full' : '?sslmode=verify-full';
+}
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: dbUrl,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -137,7 +142,7 @@ app.get('/api/verify', async (req, res) => {
 // АДМИН-МАРШРУТЫ УПРАВЛЕНИЯ ПАНЕЛЬЮ
 // ==========================================
 
-// ИСПРАВЛЕНО: Добавлен роут получения списка всех ключей для таблицы фронтенда
+// Получение списка всех ключей для таблицы фронтенда
 app.get('/api/admin/keys', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM keys ORDER BY id DESC');
