@@ -27,7 +27,8 @@ async function ensureDatabaseReady() {
                 license_key VARCHAR(255) UNIQUE NOT NULL,
                 web_login VARCHAR(255) DEFAULT '—',
                 hwid VARCHAR(255),
-                expires_at TIMESTAMP,
+                duration_ms BIGINT DEFAULT 0,
+                expires_at TIMESTAMP DEFAULT NULL,
                 is_banned BOOLEAN DEFAULT FALSE,
                 last_name VARCHAR(255) DEFAULT '—',
                 last_server VARCHAR(255) DEFAULT 'Оффлайн',
@@ -35,7 +36,16 @@ async function ensureDatabaseReady() {
             );
         `);
 
-        // 2. Мягкая миграция: проверяем и добавляем колонку web_login, если её нет
+        // 2. Миграция: добавляем колонку duration_ms для заморозки времени, если её нет
+        const checkDuration = await pool.query(`
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='licenses' AND column_name='duration_ms';
+        `);
+        if (checkDuration.rows.length === 0) {
+            await pool.query(`ALTER TABLE licenses ADD COLUMN duration_ms BIGINT DEFAULT 0;`);
+        }
+
+        // 3. Миграция: проверяем и добавляем колонку web_login, если её нет
         const checkLogin = await pool.query(`
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='licenses' AND column_name='web_login';
@@ -44,7 +54,7 @@ async function ensureDatabaseReady() {
             await pool.query(`ALTER TABLE licenses ADD COLUMN web_login VARCHAR(255) DEFAULT '—';`);
         }
 
-        // 3. Мягкая миграция: проверяем и добавляем колонку is_banned, если её нет
+        // 4. Миграция: проверяем и добавляем колонку is_banned, если её нет
         const checkBanned = await pool.query(`
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='licenses' AND column_name='is_banned';
@@ -53,7 +63,7 @@ async function ensureDatabaseReady() {
             await pool.query(`ALTER TABLE licenses ADD COLUMN is_banned BOOLEAN DEFAULT FALSE;`);
         }
 
-        // 4. Фикс старого названия колонки (если ключ раньше хранился в колонке "key")
+        // 5. Фикс старого названия колонки (если ключ раньше хранился в колонке "key")
         const checkLicenseKey = await pool.query(`
             SELECT column_name FROM information_schema.columns 
             WHERE table_name='licenses' AND column_name='license_key';
@@ -81,7 +91,7 @@ async function ensureDatabaseReady() {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Универсальный парсер времени (поддерживает 7d, 15d, 30d)
+// Универсальный парсер времени (поддерживает 7d, 15d, 30d, кастомные значения m, h, d)
 function parseTimeToMs(timeInput) {
     const value = parseInt(timeInput);
     if (isNaN(value)) return 30 * 24 * 60 * 60 * 1000;
@@ -92,7 +102,7 @@ function parseTimeToMs(timeInput) {
     return value * 24 * 60 * 60 * 1000;
 }
 
-// Генератор уникальных ключей формата XXXX-XXXX-XXXX-XXXX
+// Генератор уникальных лицензионных ключей формата XXXX-XXXX-XXXX-XXXX
 function generateRandomKey() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let key = '';
@@ -119,7 +129,7 @@ app.post('/api/admin/login', async (req, res) => {
     }
 });
 
-// ГЕНЕРАЦИЯ ЧИСТОГО КЛЮЧА
+// ГЕНЕРАЦИЯ ЗАМОРОЖЕННОГО КЛЮЧА (Время НЕ идет при создании)
 app.post('/api/admin/generate-license', async (req, res) => {
     try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database not ready' }); }
     const { password, duration, login } = req.body;
@@ -127,8 +137,13 @@ app.post('/api/admin/generate-license', async (req, res) => {
 
     try {
         const newKey = generateRandomKey();
-        const expiresAt = new Date(Date.now() + parseTimeToMs(duration));
-        await pool.query('INSERT INTO licenses (license_key, web_login, expires_at) VALUES ($1, $2, $3)', [newKey, login || '—', expiresAt]);
+        const msDuration = parseTimeToMs(duration); // Вычисляем чистый срок подписки в мс
+
+        // expires_at ставим в NULL, подписка активируется только при первом входе игрока
+        await pool.query(
+            'INSERT INTO licenses (license_key, web_login, duration_ms, expires_at) VALUES ($1, $2, $3, NULL)', 
+            [newKey, login || '—', msDuration]
+        );
         return res.json({ success: true, key: newKey });
     } catch (err) { 
         console.error(err);
@@ -168,14 +183,25 @@ app.post('/api/admin/extend', async (req, res) => {
     if (password !== ADMIN_PASSWORD) return res.status(401).json({ success: false, error: 'Invalid password' });
 
     try {
-        const licCheck = await pool.query('SELECT expires_at FROM licenses WHERE license_key = $1', [key]);
+        const licCheck = await pool.query('SELECT duration_ms, expires_at FROM licenses WHERE license_key = $1', [key]);
         if (licCheck.rows.length === 0) return res.json({ success: false, error: 'Key not found' });
         
-        let currentExpire = new Date(licCheck.rows[0].expires_at);
-        if (currentExpire < new Date()) currentExpire = new Date(); // Продлеваем от сегодняшнего дня, если уже просрочен
+        const license = licCheck.rows[0];
+        const addedMs = parseTimeToMs(duration);
 
-        const newExpire = new Date(currentExpire.getTime() + parseTimeToMs(duration));
-        await pool.query('UPDATE licenses SET expires_at = $1 WHERE license_key = $2', [newExpire, key]);
+        if (!license.expires_at) {
+            // Если ключ ещё не активирован игроком, просто увеличиваем его "замороженную" длительность
+            const newDuration = Number(license.duration_ms || 0) + addedMs;
+            await pool.query('UPDATE licenses SET duration_ms = $1 WHERE license_key = $2', [newDuration, key]);
+        } else {
+            // Если ключ уже активен, увеличиваем реальную дату окончания подписки
+            let currentExpire = new Date(license.expires_at);
+            if (currentExpire < new Date()) currentExpire = new Date(); // Если подписка уже истекла, продлеваем от текущего момента
+
+            const newExpire = new Date(currentExpire.getTime() + addedMs);
+            await pool.query('UPDATE licenses SET expires_at = $1 WHERE license_key = $2', [newExpire, key]);
+        }
+        
         return res.json({ success: true });
     } catch (e) { return res.status(500).json({ success: false }); }
 });
@@ -213,7 +239,7 @@ app.get('/api/verify', async (req, res) => {
         const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1', [key]);
         if (result.rows.length === 0) return res.json({ success: false, error: 'License not found' });
 
-        // Жесткий фикс: берём именно объект строки из возвращаемого массива rows
+        // Жесткий фикс: берём именно объект строки через индекс
         const license = result.rows[0];
 
         // 1. Проверка на бан
@@ -221,21 +247,32 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'You are banned from this cheat' });
         }
         
-        // 2. Проверка на соответствие HWID
+        // 2. Проверка на соответствие HWID (если он уже привязан)
         if (license.hwid && license.hwid !== hwid) {
             return res.json({ success: false, error: 'HWID mismatch' });
         }
         
-        // 3. Проверка срока окончания подписки
+        // 3. Проверка срока окончания подписки (только если она уже была активирована)
         if (license.expires_at && new Date(license.expires_at) < new Date()) {
             return res.json({ success: false, error: 'License expired' });
         }
 
-        // 4. Запись сетевой активности и автоматическая привязка логина/ника при первом входе
-        if (!license.hwid || license.hwid === '') {
-            await pool.query('UPDATE licenses SET hwid = $1, last_name = $2, last_server = $3, last_seen = NOW() WHERE license_key = $4', [hwid, pName, currentStatus, key]);
+        // 4. ЛОГИКА АКТИВАЦИИ И ОБНОВЛЕНИЯ СЕТЕВОЙ АКТИВНОСТИ
+        if (!license.expires_at) {
+            // ПЕРВЫЙ ВХОД ИГРОКА: Вычисляем дату окончания строго ОТ ТЕКУЩЕГО МОМЕНТА ВХОДА
+            const calculatedExpire = new Date(Date.now() + Number(license.duration_ms || 0));
+            
+            await pool.query(
+                'UPDATE licenses SET hwid = $1, last_name = $2, last_server = $3, expires_at = $4, last_seen = NOW() WHERE license_key = $5', 
+                [hwid, pName, currentStatus, calculatedExpire, key]
+            );
+            console.log(`Ключ ${key} успешно активирован пользователем ${pName}. Таймер запущен.`);
         } else {
-            await pool.query('UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3', [pName, currentStatus, key]);
+            // ПОВТОРНЫЙ ВХОД: Просто обновляем ник, текущий сервер и время активности
+            await pool.query(
+                'UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3', 
+                [pName, currentStatus, key]
+            );
         }
 
         return res.json({ success: true, message: 'Active' });
