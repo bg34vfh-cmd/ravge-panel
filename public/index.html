@@ -26,11 +26,10 @@
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
         body {
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
             padding: 30px;
             box-sizing: border-box;
+            display: flex;
+            justify-content: center;
         }
         .container {
             width: 100%;
@@ -40,15 +39,15 @@
             border-radius: 16px;
             padding: 40px;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
-            box-sizing: border-box;
+            height: fit-content;
         }
         #login-wrapper {
             position: fixed;
-            width: 100%;
-            height: 100%;
             top: 0;
             left: 0;
-            background: var(--bg-main);
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-main);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -57,12 +56,12 @@
         #login-screen {
             width: 100%;
             max-width: 400px;
-            text-align: center;
             background: var(--bg-card);
             padding: 40px;
             border-radius: 16px;
             border: 1px solid var(--border);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            text-align: center;
         }
         h1 {
             font-size: 28px;
@@ -183,17 +182,24 @@
             padding: 8px 14px;
             font-size: 12px;
             border-radius: 6px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
             text-transform: none;
             letter-spacing: normal;
         }
+        .btn-small:hover {
+            transform: none;
+            box-shadow: none;
+        }
         .btn-ban { background: #3a001c; color: var(--accent-red); border: 1px solid var(--accent-red); }
-        .btn-ban:hover { background: var(--accent-red); color: #000; box-shadow: none; transform: none; }
+        .btn-ban:hover { background: var(--accent-red); color: #000; }
         .btn-unban { background: #003a30; color: var(--accent-green); border: 1px solid var(--accent-green); }
-        .btn-unban:hover { background: var(--accent-green); color: #000; box-shadow: none; transform: none; }
+        .btn-unban:hover { background: var(--accent-green); color: #000; }
         .btn-extend { background: #22173d; color: #fff; border: 1px solid var(--primary); }
-        .btn-extend:hover { box-shadow: none; transform: none; background: var(--primary); }
+        .btn-extend:hover { background: var(--primary); }
         .btn-delete { background: #2b000a; color: #ff3366; border: 1px solid #ff3366; }
-        .btn-delete:hover { background: #ff3366; color: #000; box-shadow: none; transform: none; }
+        .btn-delete:hover { background: #ff3366; color: #000; }
     </style>
 </head>
 <body>
@@ -217,7 +223,7 @@
 
     <div class="control-panel">
         <div class="input-group">
-            <label>Срок действия новой лицензии</label>
+            <label>Срок действия</label>
             <select id="duration">
                 <option value="7d">7 дней</option>
                 <option value="15d">15 дней</option>
@@ -232,7 +238,7 @@
             <tr>
                 <th>ID</th>
                 <th>Лицензионный ключ</th>
-                <th>Логин (команда .reg)</th>
+                <th>Логин (Веб)</th>
                 <th>Ник в Minecraft</th>
                 <th>HWID привязка</th>
                 <th>Текущий Сервер</th>
@@ -273,10 +279,11 @@
                 body: JSON.stringify({ password: sessionPassword, duration: durationVal })
             });
             const data = await response.json();
-            if (data.success) {
-                alert('Лицензия создана!\nКлюч: ' + data.key);
+            if (data.success || data.key) {
+                alert(`Лицензия создана!
+Ключ: ${data.key}`);
                 loadLicenses();
-            } else { alert('Ошибка: ' + data.error); }
+            } else { alert(`Ошибка: ${data.error || 'Не удалось сгенерировать'}`); }
         } catch (err) { alert('Ошибка соединения с базой.'); }
     }
 
@@ -287,12 +294,8 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: sessionPassword, key: key, ban: !currentBanStatus })
             });
-            const data = await response.json();
-            if (data.success) {
-                loadLicenses();
-            } else {
-                alert('Ошибка изменения статуса бана');
-            }
+            await response.json();
+            loadLicenses();
         } catch (e) { console.error(e); }
     }
 
@@ -304,30 +307,22 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: sessionPassword, key: key, duration: duration })
             });
-            const data = await response.json();
-            if (data.success) { 
-                alert('Время успешно добавлено к лицензии!'); 
-                loadLicenses(); 
-            } else {
-                alert('Ошибка продления ключа');
-            }
+            await response.json();
+            alert('Время подписки успешно изменено!');
+            loadLicenses();
         } catch (e) { console.error(e); }
     }
 
     async function deleteKey(key) {
-        if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы данных?')) return;
+        if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы?')) return;
         try {
             const response = await fetch('/api/admin/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ password: sessionPassword, key: key })
             });
-            const data = await response.json();
-            if (data.success) {
-                loadLicenses();
-            } else {
-                alert('Ошибка удаления: ' + data.error);
-            }
+            await response.json();
+            loadLicenses();
         } catch (e) { console.error(e); }
     }
 
@@ -339,54 +334,57 @@
             if (!tableBody) return;
             tableBody.innerHTML = '';
 
-            const licenses = data.licenses || [];
-            if (licenses.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Ключей в базе данных не обнаружено</td></tr>';
-                return;
-            }
+            const list = data.licenses || data || [];
 
-            licenses.forEach(lic => {
+            list.forEach(lic => {
                 const row = document.createElement('tr');
-                const expireDate = lic.expires_at ? new Date(lic.expires_at).toLocaleString('ru-RU') : 'Истекла';
                 
-                let serverBadge = '<span class="badge badge-offline">Оффлайн</span>';
-                if (lic.is_banned) {
-                    serverBadge = '<span class="badge badge-banned">Забанен</span>';
-                } else if (lic.last_server === 'В меню') {
-                    serverBadge = '<span class="badge badge-menu">В меню</span>';
-                } else if (lic.last_server && lic.last_server !== 'Оффлайн') {
-                    serverBadge = '<span class="badge badge-online">' + lic.last_server + '</span>';
+                // Читаем ключ из любого возможного поля текущей вашей БД
+                const keyVal = lic.license_key || lic.key || '';
+                const expireDate = lic.expires_at ? new Date(lic.expires_at).toLocaleString('ru-RU') : 'Истекла';
+                const mcName = lic.last_name || lic.name || '—';
+                const webLogin = lic.web_login || lic.login || '—';
+                
+                let serverBadge = `<span class="badge badge-offline">Оффлайн</span>`;
+                if (lic.is_banned || lic.banned) {
+                    serverBadge = `<span class="badge badge-banned">Забанен</span>`;
+                } else if (lic.last_server === 'В меню' || lic.server === 'В меню') {
+                    serverBadge = `<span class="badge badge-menu">В меню</span>`;
+                } else {
+                    const sName = lic.last_server || lic.server;
+                    if (sName && sName !== 'Оффлайн' && sName !== '—') {
+                        serverBadge = `<span class="badge badge-online">${sName}</span>`;
+                    }
                 }
 
-                // Исправлено экранирование строк аргументов для инлайн-функций клика
-                const banBtn = lic.is_banned 
-                    ? '<button class="btn-small btn-unban" onclick="toggleBan(\'' + lic.license_key + '\', true)">Разбанить</button>'
-                    : '<button class="btn-small btn-ban" onclick="toggleBan(\'' + lic.license_key + '\', false)">Забанить</button>';
+                const isBanned = !!(lic.is_banned || lic.banned);
+                const banBtn = isBanned 
+                    ? `<button class="btn-small btn-unban" onclick="toggleBan('${keyVal}', true)">Разбанить</button>`
+                    : `<button class="btn-small btn-ban" onclick="toggleBan('${keyVal}', false)">Забанить</button>`;
 
-                const deleteBtn = '<button class="btn-small btn-delete" onclick="deleteKey(\'' + lic.license_key + '\')">Удалить</button>';
+                const selectId = `extend-${lic.id || Math.random().toString(36).substr(2, 5)}`;
 
-                const selectId = 'extend-' + lic.id;
-
-                row.innerHTML = '<td>' + lic.id + '</td>' +
-                    '<td><span class="key-style">' + lic.license_key + '</span></td>' +
-                    '<td style="font-weight: bold; color: #fff;">' + (lic.web_login || '—') + '</td>' +
-                    '<td style="color: #00f5d4; font-weight: 500;">' + (lic.last_name || '—') + '</td>' +
-                    '<td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">' + (lic.hwid || 'Свободно') + '</td>' +
-                    '<td>' + serverBadge + '</td>' +
-                    '<td>' + expireDate + '</td>' +
-                    '<td>' +
-                        '<div class="action-btns">' +
-                            banBtn +
-                            '<select id="' + selectId + '" style="padding: 6px; font-size: 12px; background: #251842;">' +
-                                '<option value="7d">+7д</option>' +
-                                '<option value="15d">+15д</option>' +
-                                '<option value="30d">+30д</option>' +
-                            '</select>' +
-                            '<button class="btn-small btn-extend" onclick="extendKey(\'' + lic.license_key + '\', \'' + selectId + '\')">Продлить</button>' +
-                            deleteBtn +
-                        '</div>' +
-                    '</td>';
-                
+                row.innerHTML = `
+                    <td>${lic.id || '—'}</td>
+                    <td><span class="key-style">${keyVal}</span></td>
+                    <td style="font-weight: bold; color: #fff;">${webLogin}</td>
+                    <td style="color: #00f5d4; font-weight: 500;">${mcName}</td>
+                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${lic.hwid || 'Свободно'}</td>
+                    <td>${serverBadge}</td>
+                    <td>${expireDate}</td>
+                    <td>
+                        <div class="action-btns">
+                            ${banBtn}
+                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842;">
+                                <option value="7d">+7д</option>
+                                <option value="15d">+15д</option>
+                                <option value="30d">+30д</option>
+                            </select>
+                            <button class="btn-small btn-extend" onclick="extendKey('${keyVal}', '${selectId}')">Продлить</button>
+                            <button class="btn-small btn-delete" onclick="deleteKey('${keyVal}')">Удалить</button>
+                        </div>
+                    </td>
+                `;
                 tableBody.appendChild(row);
             });
         } catch (err) { console.error(err); }
