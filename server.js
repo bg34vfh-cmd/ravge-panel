@@ -8,9 +8,15 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Настройка подключения к базе данных без зависаний SSL
 const connectionString = process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.POSTGRES_URL_NON_POOLING;
 const pool = connectionString 
-    ? new Pool({ connectionString: connectionString.includes("sslmode") ? connectionString : connectionString + "?sslmode=require" })
+    ? new Pool({ 
+        connectionString: connectionString,
+        ssl: {
+            rejectUnauthorized: false
+        }
+      })
     : null;
 
 let isDbInitialized = false;
@@ -101,7 +107,7 @@ app.post('/api/admin/action', async (req, res) => {
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-// ГЕЙТВЕЙ ДЛЯ МОДА: ДВУХЭТАПНАЯ АВТОРИЗАЦИЯ
+// ГЕЙТВЕЙ ДЛЯ МОДА: ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ АВТОРИЗАЦИЯ
 app.get('/api/check-license', async (req, res) => {
     let key = req.query.key;
     let playerName = req.query.name;
@@ -118,7 +124,7 @@ app.get('/api/check-license', async (req, res) => {
         const result = await pool.query('SELECT * FROM licenses WHERE key = $1', [key.trim().toUpperCase()]);
         if (result.rows.length === 0) return res.status(200).json({ success: false, status: "error", error: "Ключ не найден" });
 
-        // ФИКС: Берем именно первый элемент [0] из полученных строк БД, а не весь массив целиком
+        // ФИКС: Извлекаем объект конкретной лицензии из первой строки массива результатов
         const license = result.rows[0]; 
 
         if (license.status === 'banned') return res.status(200).json({ success: false, status: "error", error: "Лицензия заблокирована" });
@@ -156,10 +162,10 @@ app.get('/api/check-license', async (req, res) => {
             [Date.now(), playerName || '—', serverIp || '—', key.trim().toUpperCase()]
         );
 
-        res.status(200).json({ success: true, status: "success" });
+        return res.status(200).json({ success: true, status: "success" });
     } catch (err) { 
         console.error(err);
-        res.status(200).json({ success: false, status: "error", error: "Внутренняя ошибка сервера" }); 
+        return res.status(200).json({ success: false, status: "error", error: "Внутренняя ошибка сервера" }); 
     }
 });
 
