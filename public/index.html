@@ -26,20 +26,11 @@
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
         body {
-            padding: 30px;
-            box-sizing: border-box;
             display: flex;
             justify-content: center;
-        }
-        .container {
-            width: 100%;
-            max-width: 1400px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
-            height: fit-content;
+            align-items: flex-start;
+            padding: 30px;
+            box-sizing: border-box;
         }
         #login-wrapper {
             position: fixed;
@@ -62,6 +53,17 @@
             border: 1px solid var(--border);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
             text-align: center;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+            box-sizing: border-box;
         }
         h1 {
             font-size: 28px;
@@ -72,6 +74,7 @@
             margin-bottom: 5px;
             text-transform: uppercase;
             letter-spacing: 1.5px;
+            margin-top: 0;
         }
         p.subtitle {
             color: var(--text-muted);
@@ -182,35 +185,29 @@
             padding: 8px 14px;
             font-size: 12px;
             border-radius: 6px;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
             text-transform: none;
-            letter-spacing: normal;
-        }
-        .btn-small:hover {
-            transform: none;
-            box-shadow: none;
+            letter-spacing: 0;
+            font-weight: 600;
         }
         .btn-ban { background: #3a001c; color: var(--accent-red); border: 1px solid var(--accent-red); }
-        .btn-ban:hover { background: var(--accent-red); color: #000; }
+        .btn-ban:hover { background: var(--accent-red); color: #000; transform: none; box-shadow: none; }
         .btn-unban { background: #003a30; color: var(--accent-green); border: 1px solid var(--accent-green); }
-        .btn-unban:hover { background: var(--accent-green); color: #000; }
+        .btn-unban:hover { background: var(--accent-green); color: #000; transform: none; box-shadow: none; }
         .btn-extend { background: #22173d; color: #fff; border: 1px solid var(--primary); }
-        .btn-extend:hover { background: var(--primary); }
+        .btn-extend:hover { transform: none; box-shadow: none; background: var(--primary); }
         .btn-delete { background: #2b000a; color: #ff3366; border: 1px solid #ff3366; }
-        .btn-delete:hover { background: #ff3366; color: #000; }
+        .btn-delete:hover { background: #ff3366; color: #000; transform: none; box-shadow: none; }
     </style>
 </head>
 <body>
 
-<!-- ПОЛНОЭКРАННЫЙ ОВЕРЛЕЙ АВТОРИЗАЦИИ -->
+<!-- ЭКРАН АВТОРИЗАЦИИ НА ВЕСЬ ЭКРАН -->
 <div id="login-wrapper">
     <div id="login-screen">
         <h1>RAVGE LOGIN</h1>
         <p class="subtitle">Введите мастер-пароль панели</p>
         <div class="input-group" style="margin-bottom: 20px;">
-            <input type="password" id="admin-pass" placeholder="Пароль администратора...">
+            <input type="password" id="admin-pass" placeholder="Пароль администратора..." style="width: 100%; box-sizing: border-box;">
         </div>
         <button onclick="login()" style="width: 100%;">Войти</button>
     </div>
@@ -230,7 +227,7 @@
                 <option value="30d">30 дней</option>
             </select>
         </div>
-        <button onclick="generateKey()" style="margin-top: 16px;">+ Создать лицензию</button>
+        <button onclick="generateKey()" style="margin-top: 16px;">+ Создать чистую лицензию</button>
     </div>
 
     <table>
@@ -264,7 +261,7 @@
             document.getElementById('login-wrapper').style.display = 'none';
             document.getElementById('main-panel').style.display = 'block';
             loadLicenses();
-            setInterval(loadLicenses, 5000);
+            setInterval(loadLicenses, 5000); 
         } else {
             alert('Неверный мастер-пароль панели!');
         }
@@ -272,6 +269,7 @@
 
     async function generateKey() {
         const durationVal = document.getElementById('duration').value;
+
         try {
             const response = await fetch('/api/admin/generate-license', {
                 method: 'POST',
@@ -279,50 +277,62 @@
                 body: JSON.stringify({ password: sessionPassword, duration: durationVal })
             });
             const data = await response.json();
-            if (data.success || data.key) {
-                alert(`Лицензия создана!
-Ключ: ${data.key}`);
+            if (data.success) {
+                alert(`Лицензия успешно создана!\nКлюч: ${data.key}`);
                 loadLicenses();
-            } else { alert(`Ошибка: ${data.error || 'Не удалось сгенерировать'}`); }
+            } else { alert(`Ошибка: ${data.error}`); }
         } catch (err) { alert('Ошибка соединения с базой.'); }
     }
 
-    async function toggleBan(key, currentBanStatus) {
+    async function toggleBan(licenseKey, currentBanStatus) {
         try {
             const response = await fetch('/api/admin/ban', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: key, ban: !currentBanStatus })
+                body: JSON.stringify({ password: sessionPassword, key: licenseKey, ban: !currentBanStatus })
             });
-            await response.json();
-            loadLicenses();
+            const data = await response.json();
+            if (data.success) {
+                loadLicenses();
+            } else {
+                alert('Ошибка изменения статуса бана');
+            }
         } catch (e) { console.error(e); }
     }
 
-    async function extendKey(key, selectId) {
+    async function extendKey(licenseKey, selectId) {
         const duration = document.getElementById(selectId).value;
         try {
             const response = await fetch('/api/admin/extend', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: key, duration: duration })
+                body: JSON.stringify({ password: sessionPassword, key: licenseKey, duration: duration })
             });
-            await response.json();
-            alert('Время подписки успешно изменено!');
-            loadLicenses();
+            const data = await response.json();
+            if (data.success) { 
+                alert('Время успешно добавлено к лицензии!'); 
+                loadLicenses(); 
+            } else {
+                alert('Ошибка продления лицензии');
+            }
         } catch (e) { console.error(e); }
     }
 
-    async function deleteKey(key) {
-        if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы?')) return;
+    async function deleteKey(licenseKey) {
+        if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить этот ключ из базы данных?')) return;
+        
         try {
             const response = await fetch('/api/admin/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: sessionPassword, key: key })
+                body: JSON.stringify({ password: sessionPassword, key: licenseKey })
             });
-            await response.json();
-            loadLicenses();
+            const data = await response.json();
+            if (data.success) {
+                loadLicenses();
+            } else {
+                alert(`Ошибка удаления: ${data.error || 'эндпоинт удаления не поддерживается вашим сервером'}`);
+            }
         } catch (e) { console.error(e); }
     }
 
@@ -334,54 +344,61 @@
             if (!tableBody) return;
             tableBody.innerHTML = '';
 
-            const list = data.licenses || data || [];
+            const list = data.licenses || [];
+            if (list.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">Ключей в базе данных не обнаружено</td></tr>`;
+                return;
+            }
 
             list.forEach(lic => {
                 const row = document.createElement('tr');
                 
-                // Читаем ключ из любого возможного поля текущей вашей БД
-                const keyVal = lic.license_key || lic.key || '';
+                // Поддержка разных названий колонок (совместимость)
+                const licenseKey = lic.license_key || lic.key || '';
+                const webLogin = lic.web_login || '—';
+                const minecraftName = lic.last_name || '—';
+                const hwidVal = lic.hwid || 'Свободно';
+                const currentServer = lic.last_server || lic.server || 'Оффлайн';
+                const isBanned = lic.is_banned || lic.banned || false;
+                
                 const expireDate = lic.expires_at ? new Date(lic.expires_at).toLocaleString('ru-RU') : 'Истекла';
-                const mcName = lic.last_name || lic.name || '—';
-                const webLogin = lic.web_login || lic.login || '—';
                 
                 let serverBadge = `<span class="badge badge-offline">Оффлайн</span>`;
-                if (lic.is_banned || lic.banned) {
+                if (isBanned) {
                     serverBadge = `<span class="badge badge-banned">Забанен</span>`;
-                } else if (lic.last_server === 'В меню' || lic.server === 'В меню') {
+                } else if (currentServer === 'В меню') {
                     serverBadge = `<span class="badge badge-menu">В меню</span>`;
-                } else {
-                    const sName = lic.last_server || lic.server;
-                    if (sName && sName !== 'Оффлайн' && sName !== '—') {
-                        serverBadge = `<span class="badge badge-online">${sName}</span>`;
-                    }
+                } else if (currentServer && currentServer !== 'Оффлайн') {
+                    serverBadge = `<span class="badge badge-online">${currentServer}</span>`;
                 }
 
-                const isBanned = !!(lic.is_banned || lic.banned);
-                const banBtn = isBanned 
-                    ? `<button class="btn-small btn-unban" onclick="toggleBan('${keyVal}', true)">Разбанить</button>`
-                    : `<button class="btn-small btn-ban" onclick="toggleBan('${keyVal}', false)">Забанить</button>`;
+                // Исправлено: экранируем кавычки для безопасного вызова функций с текстовым аргументом ключа
+                const escapedKey = licenseKey.replace(/'/g, "\\'");
 
-                const selectId = `extend-${lic.id || Math.random().toString(36).substr(2, 5)}`;
+                const banBtn = isBanned 
+                    ? `<button class="btn-small btn-unban" onclick="toggleBan('${escapedKey}', true)">Разбанить</button>`
+                    : `<button class="btn-small btn-ban" onclick="toggleBan('${escapedKey}', false)">Забанить</button>`;
+
+                const selectId = `extend-${lic.id}`;
 
                 row.innerHTML = `
-                    <td>${lic.id || '—'}</td>
-                    <td><span class="key-style">${keyVal}</span></td>
+                    <td>${lic.id}</td>
+                    <td><span class="key-style">${licenseKey}</span></td>
                     <td style="font-weight: bold; color: #fff;">${webLogin}</td>
-                    <td style="color: #00f5d4; font-weight: 500;">${mcName}</td>
-                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${lic.hwid || 'Свободно'}</td>
+                    <td style="color: #00f5d4; font-weight: 500;">${minecraftName}</td>
+                    <td style="font-size: 11px; font-family: monospace; color: var(--text-muted);">${hwidVal}</td>
                     <td>${serverBadge}</td>
                     <td>${expireDate}</td>
                     <td>
                         <div class="action-btns">
                             ${banBtn}
-                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842;">
+                            <select id="${selectId}" style="padding: 6px; font-size: 12px; background: #251842; border-color: #4a2785;">
                                 <option value="7d">+7д</option>
                                 <option value="15d">+15д</option>
                                 <option value="30d">+30д</option>
                             </select>
-                            <button class="btn-small btn-extend" onclick="extendKey('${keyVal}', '${selectId}')">Продлить</button>
-                            <button class="btn-small btn-delete" onclick="deleteKey('${keyVal}')">Удалить</button>
+                            <button class="btn-small btn-extend" onclick="extendKey('${escapedKey}', '${selectId}')">Продлить</button>
+                            <button class="btn-small btn-delete" onclick="deleteKey('${escapedKey}')">Удалить</button>
                         </div>
                     </td>
                 `;
