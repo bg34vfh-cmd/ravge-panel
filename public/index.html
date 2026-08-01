@@ -8,20 +8,23 @@
         #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0b0b0e; display: flex; justify-content: center; align-items: center; z-index: 999; }
         .box { background: #121217; padding: 30px; border-radius: 12px; border: 2px solid #581c87; text-align: center; box-shadow: 0 0 20px rgba(88,28,135,0.4); width: 100%; max-width: 380px; }
         .container { width: 100%; max-width: 1150px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 25px; box-shadow: 0 0 20px rgba(88,28,135,0.3); display: none; }
-        .panel { display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px; background: #14141c; padding: 15px; border-radius: 8px; border: 1px solid #1f1f2e; }
-        .t-row { display: flex; gap: 6px; align-items: center; }
-        .t-btn { background: #1c1c24; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
-        .t-btn.active { background: #581c87; border-color: #a855f7; color: #fff; }
+        .panel { display: flex; gap: 10px; align-items: center; margin-bottom: 25px; background: #14141c; padding: 15px; border-radius: 8px; border: 1px solid #1f1f2e; }
+        
+        /* СТИЛЬ ВЫПАДАЮЩЕГО МЕНЮ */
+        select { background: #1c1c24; border: 1px solid #3f3f46; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer; }
+        select:focus { border-color: #a855f7; }
+        
         input[type="text"], input[type="password"] { background: #1c1c24; border: 1px solid #3f3f46; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; }
         input:focus { border-color: #a855f7; }
         .btn { background: #581c87; color: #fff; border: none; padding: 9px 20px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+        
         table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
-        th, td { padding: 10px 12px; font-size: 13px; }
+        th, td { padding: 12px 14px; font-size: 13px; }
         th { background: #181820; color: #a1a1aa; text-transform: uppercase; font-size: 11px; }
         tr { border-bottom: 1px solid #1f1f2e; }
         .status.active { color: #4ade80; font-weight: bold; }
         .status.banned { color: #f87171; font-weight: bold; }
-        .act-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .act-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .act-btn.ban { border-color: #ef4444; color: #f87171; }
         .act-btn.ext { border-color: #3b82f6; color: #60a5fa; }
     </style>
@@ -40,14 +43,17 @@
 <div class="container" id="panel">
     <h1 style="margin-bottom:15px;">RAVGE <span style="color:#a855f7;">PREMIUM</span> CONTROL</h1>
     <div class="panel">
-        <div class="t-row">
-            <button class="t-btn active" id="g30" onclick="setG('30 д','g30')">30 Дней</button>
-            <button class="t-btn" id="g15" onclick="setG('15 д','g15')">15 Дней</button>
-            <button class="t-btn" id="g7" onclick="setG('7 д','g7')">7 Дней</button>
-            <button class="t-btn" id="g1" onclick="setG('1 ч','g1')">1 Час</button>
-            <input type="text" id="g-cust" placeholder="Кастомное время (10 мин)" style="width:180px;" oninput="clrGB()">
-            <button class="btn" onclick="gen()" style="margin-left:auto;">＋ Создать Ключ</button>
-        </div>
+        <span style="font-size:13px; color:#a1a1aa;">Время для нового ключа:</span>
+        <!-- ВЫПАДАЮЩЕЕ МЕНЮ ДЛЯ ГЕНЕРАЦИИ -->
+        <select id="gen-select" onchange="toggleGenCustom()">
+            <option value="30 д">30 Дней</option>
+            <option value="15 д">15 Дней</option>
+            <option value="7 д">7 Дней</option>
+            <option value="1 ч">1 Час</option>
+            <option value="custom">Свой формат...</option>
+        </select>
+        <input type="text" id="g-cust" placeholder="Пример: 10 мин, 5 ч" style="width:180px; display:none;">
+        <button class="btn" onclick="gen()" style="margin-left:auto;">＋ Создать Ключ</button>
     </div>
     <table>
         <thead><tr><th>ID</th><th>Ключ</th><th>Игрок</th><th>Сервер</th><th>Окончание</th><th>Статус</th><th>Действия</th></tr></thead>
@@ -56,7 +62,6 @@
 </div>
 
 <script>
-    let curG = '30 д', extT = {};
     async function login() {
         const res = await fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:document.getElementById('pass').value}) });
         if ((await res.json()).success) {
@@ -65,44 +70,62 @@
             load(); setInterval(load, 3000);
         } else document.getElementById('err').style.display = 'block';
     }
-    function setG(v, id) { curG = v; document.getElementById('g-cust').value = ''; document.querySelectorAll('.panel .t-btn').forEach(b => b.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-    function clrGB() { curG = ''; document.querySelectorAll('.panel .t-btn').forEach(b => b.classList.remove('active')); }
-    function setE(id, v, t) { extT[id] = v; document.getElementById(`e-cust-${id}`).value = ''; document.querySelectorAll(`.eg-${id}`).forEach(b => b.classList.remove('active')); document.getElementById(`be-${t}-${id}`).classList.add('active'); }
-    function clrEB(id) { extT[id] = ''; document.querySelectorAll(`.eg-${id}`).forEach(b => b.classList.remove('active')); }
+
+    // Показ кастомного поля при генерации
+    function toggleGenCustom() {
+        const select = document.getElementById('gen-select');
+        document.getElementById('g-cust').style.display = select.value === 'custom' ? 'block' : 'none';
+    }
+
+    // Показ кастомного поля при продлении для конкретной строки
+    function toggleExtCustom(id) {
+        const select = document.getElementById(`ext-select-${id}`);
+        document.getElementById(`e-cust-${id}`).style.display = select.value === 'custom' ? 'block' : 'none';
+    }
     
     async function load() {
         const res = await fetch('/api/admin/keys'); const data = await res.json(); if (!data.success) return;
         const tbody = document.getElementById('tbody'); tbody.innerHTML = '';
         data.keys.forEach(item => {
-            if (extT[item.id] === undefined) extT[item.id] = '30 д';
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>#${item.id}</td><td style="font-weight:bold;">${item.key}</td>
+                <td>#${item.id}</td><td style="font-weight:bold; letter-spacing:0.5px;">${item.key}</td>
                 <td style="color:#60a5fa;">${item.player_name||'—'}</td><td style="color:#fbbf24;">${item.server_ip||'—'}</td>
                 <td style="color:#c084fc;">${item.expires_at>0?new Date(item.expires_at).toLocaleString('ru-RU'):'Не активирован'}</td>
                 <td><span class="status ${item.status}">${item.status.toUpperCase()}</span></td>
                 <td>
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <div class="t-row">
-                            <button class="t-btn eg-${item.id} ${extT[item.id]==='30 д'?'active':''}" id="be-30-${item.id}" onclick="setE(${item.id},'30 д','30')">30д</button>
-                            <button class="t-btn eg-${item.id} ${extT[item.id]==='15 д'?'active':''}" id="be-15-${item.id}" onclick="setE(${item.id},'15 д','15')">15д</button>
-                            <button class="t-btn eg-${item.id} ${extT[item.id]==='7 д'?'active':''}" id="be-7-${item.id}" onclick="setE(${item.id},'7 д','7')">7д</button>
-                            <button class="t-btn eg-${item.id} ${extT[item.id]==='1 ч'?'active':''}" id="be-1-${item.id}" onclick="setE(${item.id},'1 ч','1')">1ч</button>
-                            <input type="text" id="e-cust-${item.id}" placeholder="Мин/Ч" style="width:65px; padding:3px;" oninput="clrEB(${item.id})">
-                        </div>
-                        <div class="t-row">
-                            <button class="act-btn ban" onclick="req('/api/toggle-status',{id:item.id,currentStatus:item.status})">${item.status==='active'?'Бан':'Разбан'}</button>
-                            <button class="act-btn ext" onclick="ext(${item.id})">Продлить</button>
-                            <button class="act-btn" onclick="if(confirm('Удалить?'))req('/api/delete',{id:item.id})">Удалить</button>
-                        </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <!-- ВЫПАДАЮЩЕЕ МЕНЮ ДЛЯ ПРОДЛЕНИЯ -->
+                        <select id="ext-select-${item.id}" onchange="toggleExtCustom(${item.id})">
+                            <option value="30 д">30 дней</option>
+                            <option value="15 д">15 дней</option>
+                            <option value="7 д">7 дней</option>
+                            <option value="1 ч">1 час</option>
+                            <option value="custom">Кастом...</option>
+                        </select>
+                        <input type="text" id="e-cust-${item.id}" placeholder="10 мин" style="width:75px; padding:6px; display:none;">
+                        
+                        <button class="act-btn ban" onclick="req('/toggle-status',{id:${item.id},currentStatus:'${item.status}'})">${item.status==='active'?'Бан':'Разбан'}</button>
+                        <button class="act-btn ext" onclick="ext(${item.id})">Продлить</button>
+                        <button class="act-btn" onclick="if(confirm('Удалить?'))req('/delete',{id:${item.id}})">Удалить</button>
                     </div>
                 </td>`;
             tbody.appendChild(tr);
         });
     }
     async function req(url, body) { await fetch(`/api/admin${url}`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); load(); }
-    function gen() { req('/generate-license', { timeInput: curG || document.getElementById('g-cust').value }); }
-    function ext(id) { req('/extend', { id, timeInput: extT[id] || document.getElementById(`e-cust-${id}`).value }); }
+    
+    function gen() { 
+        const select = document.getElementById('gen-select');
+        const timeInput = select.value === 'custom' ? document.getElementById('g-cust').value : select.value;
+        req('/generate-license', { timeInput }); 
+    }
+    
+    function ext(id) { 
+        const select = document.getElementById(`ext-select-${id}`);
+        const timeInput = select.value === 'custom' ? document.getElementById(`e-cust-${id}`).value : select.value;
+        req('/extend', { id, timeInput }); 
+    }
 </script>
 </body>
 </html>
