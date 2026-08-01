@@ -7,59 +7,64 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background: #0b0b0e; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; }
-        .container { width: 100%; max-width: 1100px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
+        .container { width: 100%; max-width: 1150px; background: #121217; border-radius: 12px; border: 2px solid #581c87; padding: 30px; box-shadow: 0 0 25px rgba(88, 28, 135, 0.4); }
         h1 { font-size: 28px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; }
         h1 span { color: #a855f7; }
         .subtitle { color: #71717a; font-size: 14px; margin-bottom: 25px; }
-        .btn { background: #581c87; color: #fff; border: none; padding: 12px 24px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s ease-in-out; box-shadow: 0 4px 10px rgba(88, 28, 135, 0.3); }
-        .btn:hover { background: #7024ab; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(88, 28, 135, 0.5); }
-        .table-container { margin-top: 30px; overflow-x: auto; }
+        
+        .controls-panel { display: flex; gap: 10px; align-items: center; margin-bottom: 30px; background: #14141c; padding: 15px; border-radius: 8px; border: 1px solid #1f1f2e; }
+        input[type="text"] { background: #1c1c24; border: 1px solid #3f3f46; color: #fff; padding: 10px 15px; border-radius: 6px; font-size: 14px; outline: none; }
+        input[type="text"]:focus { border-color: #a855f7; }
+        
+        .btn { background: #581c87; color: #fff; border: none; padding: 11px 24px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .btn:hover { background: #7024ab; transform: translateY(-1px); }
+        
         table { width: 100%; border-collapse: collapse; text-align: left; background: #14141c; border-radius: 8px; overflow: hidden; }
         th, td { padding: 14px 15px; font-size: 14px; }
-        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+        th { background: #181820; color: #a1a1aa; font-weight: 600; text-transform: uppercase; font-size: 12px; }
         tr { border-bottom: 1px solid #1f1f2e; }
-        tr:last-child { border-bottom: none; }
         tr:hover { background: #1b1b26; }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; display: inline-block; }
+        
+        .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .status.active { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
         .status.banned { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-        .badge { background: #27272a; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #d4d4d8; }
-        .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; margin-right: 3px; }
+        
+        .action-btn { background: none; border: 1px solid #3f3f46; color: #a1a1aa; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; }
         .action-btn.ban { border-color: #ef4444; color: #f87171; }
         .action-btn.ban:hover { background: #ef4444; color: #fff; }
         .action-btn.extend { border-color: #3b82f6; color: #60a5fa; }
         .action-btn.extend:hover { background: #3b82f6; color: #fff; }
         .action-btn.del { border-color: #71717a; color: #e4e4e7; }
         .action-btn.del:hover { background: #e4e4e7; color: #000; }
-        .time { font-family: monospace; color: #c084fc; }
+        
+        .extend-input { width: 80px !important; padding: 4px 8px !important; font-size: 12px !important; margin-right: 4px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>RAVGE <span>PREMIUM</span> CONTROL</h1>
-    <div class="subtitle">Разработчик: Forthbxr | Исправленная версия Vercel App</div>
+    <div class="subtitle">Разработчик: Forthbxr | Полное управление временем (мин, ч, д)</div>
     
-    <button class="btn" onclick="generateKey()">⚡ Сгенерировать новый 30-дней ключ</button>
-
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Лицензионный Ключ</th>
-                    <th>Покупатель</th>
-                    <th>Сервер</th>
-                    <th>Окончание подписки</th>
-                    <th>Статус</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="keys-table-body">
-                <!-- Заполняется автоматически -->
-            </tbody>
-        </table>
+    <div class="controls-panel">
+        <input type="text" id="gen-time" value="30 д" placeholder="Пример: 10 мин, 5 ч, 30 д">
+        <button class="btn" onclick="generateKey()">⚡ Создать Ключ</button>
     </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Лицензионный Ключ</th>
+                <th>Покупатель</th>
+                <th>Сервер</th>
+                <th>Окончание подписки</th>
+                <th>Статус</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody id="keys-table-body"></tbody>
+    </table>
 </div>
 
 <script>
@@ -74,35 +79,47 @@
 
             data.keys.forEach(item => {
                 const tr = document.createElement('tr');
-                
                 let expiresStr = 'Не активирован';
                 if (item.expires_at > 0) {
-                    const date = new Date(item.expires_at);
-                    expiresStr = date.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    expiresStr = new Date(item.expires_at).toLocaleString('ru-RU');
                 }
 
                 tr.innerHTML = `
-                    <td><span class="badge">#${item.id}</span></td>
-                    <td style="font-weight: bold; letter-spacing: 1px;">${item.key}</td>
+                    <td>#${item.id}</td>
+                    <td style="font-weight: bold; letter-spacing: 0.5px;">${item.key}</td>
                     <td style="color: #60a5fa;">${item.player_name || '—'}</td>
                     <td style="color: #fbbf24;">${item.server_ip || '—'}</td>
-                    <td class="time">${expiresStr}</td>
-                    <td><span class="status ${item.status}">${item.status === 'active' ? 'ACTIVE' : 'BANNED'}</span></td>
+                    <td style="color: #c084fc;">${expiresStr}</td>
+                    <td><span class="status ${item.status}">${item.status.toUpperCase()}</span></td>
                     <td>
                         <button class="action-btn ban" onclick="toggleStatus(${item.id}, '${item.status}')">${item.status === 'active' ? 'Бан' : 'Разбан'}</button>
-                        <button class="action-btn extend" onclick="extendKey(${item.id})">+30 Дней</button>
+                        <input type="text" class="extend-input" id="ext-input-${item.id}" value="30 д" placeholder="10 мин">
+                        <button class="action-btn extend" onclick="extendKey(${item.id})">Продлить</button>
                         <button class="action-btn del" onclick="deleteKey(${item.id})">Удалить</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
     }
 
     async function generateKey() {
-        await fetch('/api/admin/generate-license', { method: 'POST' });
+        const timeInput = document.getElementById('gen-time').value;
+        await fetch('/api/admin/generate-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timeInput })
+        });
+        loadKeys();
+    }
+
+    async function extendKey(id) {
+        const timeInput = document.getElementById(`ext-input-${id}`).value;
+        await fetch('/api/admin/extend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, timeInput })
+        });
         loadKeys();
     }
 
@@ -115,19 +132,8 @@
         loadKeys();
     }
 
-    // Кнопка продления времени подписки на 30 дней (Добавлена!)
-    async function extendKey(id) {
-        const res = await fetch('/api/admin/extend', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, timeInput: 30 })
-        });
-        const data = await res.json();
-        if (data.success) loadKeys();
-    }
-
     async function deleteKey(id) {
-        if (!confirm("Удалить этот ключ?")) return;
+        if (!confirm("Удалить ключ?")) return;
         await fetch('/api/admin/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
