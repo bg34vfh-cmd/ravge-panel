@@ -16,7 +16,7 @@ const pool = new Pool({
 // Флаг инициализации базы данных
 let isDbInitialized = false;
 
-// Гарантированная функция инициализации таблицы
+// Гарантированная функция инициализации таблицы (вызывается внутри эндпоинтов)
 async function ensureDatabaseReady() {
     if (isDbInitialized) return;
     
@@ -64,7 +64,7 @@ async function ensureDatabaseReady() {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Универсальный парсер входящих тарифов (поддерживает "7 дней", "30 дней", "30d", "15 d")
+// Универсальный парсер входящих тарифов (поддерживает "7d", "15d", "30d", "7 дней")
 function parseTimeToMs(timeInput) {
     if (!timeInput) return 30 * 24 * 60 * 60 * 1000;
     const value = parseInt(timeInput);
@@ -79,7 +79,7 @@ function parseTimeToMs(timeInput) {
     return value * 24 * 60 * 60 * 1000;
 }
 
-// Генератор ключей формата XXXX-XXXX-XXXX-XXXX
+// Генератор уникальных ключей формата XXXX-XXXX-XXXX-XXXX
 function generateRandomKey() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let key = '';
@@ -202,7 +202,7 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: false, error: 'License not found' });
         }
 
-        // ИСПРАВЛЕНО: Извлекаем объект первой строки с индексом [0]
+        // Извлекаем конкретный объект первой строки таблицы
         const license = result.rows[0]; 
 
         // 1. Проверка на соответствие HWID (если он уже привязан)
