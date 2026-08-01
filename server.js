@@ -13,9 +13,15 @@ const pool = new Pool({
         : { rejectUnauthorized: false }
 });
 
-// Автоматическая инициализация и проверка структуры таблицы базы данных
-async function initDatabase() {
+// Флаг, чтобы не мучить базу лишними проверками таблиц после её создания
+let isDbInitialized = false;
+
+// Гарантированная функция инициализации таблицы (вызывается внутри эндпоинтов)
+async function ensureDatabaseReady() {
+    if (isDbInitialized) return;
+    
     try {
+        // Создаем правильную таблицу, если её вообще не было
         await pool.query(`
             CREATE TABLE IF NOT EXISTS licenses (
                 id SERIAL PRIMARY KEY,
@@ -27,12 +33,34 @@ async function initDatabase() {
                 last_seen TIMESTAMP DEFAULT NOW()
             );
         `);
-        console.log("База данных успешно проверена и готова к работе.");
+
+        // Проверяем наличие колонки license_key (фикс для старых таблиц)
+        const columnCheck = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='licenses' AND column_name='license_key';
+        `);
+
+        if (columnCheck.rows.length === 0) {
+            const oldKeyCheck = await pool.query(`
+                SELECT column_name FROM information_schema.columns 
+                WHERE table_name='licenses' AND column_name='key';
+            `);
+            
+            if (oldKeyCheck.rows.length > 0) {
+                await pool.query(`ALTER TABLE licenses RENAME COLUMN "key" TO license_key;`);
+            } else {
+                await pool.query(`ALTER TABLE licenses ADD COLUMN license_key VARCHAR(255) UNIQUE;`);
+            }
+        }
+
+        isDbInitialized = true;
+        console.log("База данных успешно проверена и полностью готова к работе.");
     } catch (err) {
         console.error("Критическая ошибка инициализации базы данных:", err);
+        throw err; // Пробрасываем ошибку дальше, чтобы остановить упавший запрос
     }
 }
-initDatabase();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -63,12 +91,17 @@ function generateRandomKey() {
     return key;
 }
 
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
+    try {
+        await ensureDatabaseReady(); // Готовим БД при визите на сайт
+    } catch(e) {}
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Авторизация администратора
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
+    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database error' }); }
+    
     const adminPassword = process.env.ADMIN_PASSWORD || 'coco2012coco!';
     if (req.body.password === adminPassword) {
         res.json({ success: true });
@@ -79,6 +112,8 @@ app.post('/api/admin/login', (req, res) => {
 
 // Контроллер создания новой лицензии
 async function handleGenerateLicense(req, res) {
+    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database error' }); }
+
     const { password, duration } = req.body; 
     const adminPassword = process.env.ADMIN_PASSWORD || 'coco2012coco!';
     
@@ -114,6 +149,8 @@ app.post('/api/admin/keys', handleGenerateLicense);
 
 // Контроллер получения списка ключей для веб-интерфейса
 async function handleGetLicensesList(req, res) {
+    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database error' }); }
+
     try {
         const offlineThreshold = new Date(Date.now() - 3 * 60 * 1000);
 
@@ -140,6 +177,8 @@ app.get('/api/licenses', handleGetLicensesList);
 
 // Проверка лицензии модом игры и отслеживание положения клиента
 app.get('/api/verify', async (req, res) => {
+    try { await ensureDatabaseReady(); } catch(e) { return res.status(500).json({ success: false, error: 'Database error' }); }
+
     let { key, hwid, name, server, action } = req.query;
     if (!key || !hwid) return res.json({ success: false, error: 'Missing key or HWID' });
 
@@ -162,12 +201,10 @@ app.get('/api/verify', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM licenses WHERE license_key = $1', [key]);
         
-        // ЗАЩИТА: Проверяем, вернула ли база хоть одну строку
         if (result.rows.length === 0) {
             return res.json({ success: false, error: 'License not found' });
         }
 
-        // ИСПРАВЛЕНО: Теперь гарантированно берем единственный объект строки [0]
         const license = result.rows[0]; 
 
         // 1. Проверка на соответствие HWID (если он уже привязан)
@@ -182,13 +219,11 @@ app.get('/api/verify', async (req, res) => {
 
         // 3. Только если лицензия полностью валидна — обновляем базу данных
         if (!license.hwid || license.hwid === '') {
-            // Если первая авторизация — привязываем HWID и обновляем статус
             await pool.query(
                 'UPDATE licenses SET hwid = $1, last_name = $2, last_server = $3, last_seen = NOW() WHERE license_key = $4',
                 [hwid, pName, currentStatus, key]
             );
         } else {
-            // Если повторная — обновляем только активность и ник
             await pool.query(
                 'UPDATE licenses SET last_name = $1, last_server = $2, last_seen = NOW() WHERE license_key = $3',
                 [pName, currentStatus, key]
