@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Подключение к Neon PostgreSQL (Переменная DATABASE_URL должна быть в Vercel Environment Variables)
+// Подключение к Neon PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -36,15 +36,21 @@ app.post('/api/admin/login', (req, res) => {
     else res.json({ success: false });
 });
 
-// Проверка лицензии из Minecraft чита
+// Проверка лицензии и динамическое обновление статусов игрока
 app.get('/api/verify', async (req, res) => {
     let { key, hwid, name, server, action, login, password } = req.query;
     if (!key || !hwid) return res.json({ success: false });
 
     key = key.trim().toUpperCase();
     hwid = hwid.trim().toUpperCase();
-    const pName = name ? decodeURIComponent(name) : '—';
-    const sIp = server ? decodeURIComponent(server) : '—';
+    
+    // Получаем чистый ник игрока
+    let pName = name ? decodeURIComponent(name).trim() : '—';
+    if (!pName || pName === '') pName = '—';
+
+    // Получаем то, что мод передал в качестве сервера
+    let sIp = server ? decodeURIComponent(server).trim() : '—';
+    if (!sIp || sIp === '') sIp = '—';
 
     try {
         const result = await pool.query('SELECT * FROM keys WHERE key = $1', [key]);
@@ -87,13 +93,42 @@ app.get('/api/verify', async (req, res) => {
             return res.json({ success: true, need_register: true });
         }
 
-        // Проверка привязки по железу (HWID)
+        // --- УМНАЯ ЛОГИКА СТАТУСОВ ДЛЯ ТАБЛИЦЫ АДМИНКИ ---
+        let finalPlayerField = row.login ? `${row.login} (${pName})` : pName; 
+        let finalServerField = sIp;
+        let finalStatusField = 'active'; // По умолчанию в админке горит зеленый ACTIVE
+
+        // Проверяем, что именно прислал клиент
+        const lowerServer = sIp.toLowerCase();
+        
+        if (lowerServer.includes('оффлайн') || lowerServer.includes('offline') || lowerServer.includes('офлайн')) {
+            // Если игрок полностью закрыл Майнкрафт (сработал твой ShutdownHook)
+            finalServerField = '—'; 
+            finalPlayerField = row.login ? `${row.login} [Офлайн]` : '—';
+        } else if (lowerServer.includes('меню') || lowerServer.includes('menu') || lowerServer.includes('title')) {
+            // Если игрок вышел в главное меню игры
+            finalServerField = 'В меню';
+        } else if (lowerServer.includes('singleplayer') || lowerServer.includes('одиноч')) {
+            // Если играет в одиночном мире (как у игрока Player123 на твоем скриншоте)
+            finalServerField = 'Одиночная игра';
+        } else {
+            // Во всех остальных случаях считаем, что это IP-адрес сервера (например, mc.hypixel.net)
+            finalServerField = sIp;
+        }
+
+        // Проверка привязки по железу (HWID) и обновление строки в БД
         if (!row.hwid) {
-            await pool.query('UPDATE keys SET hwid = $1, player_name = $2, server_ip = $3, last_seen = $4 WHERE key = $5', [hwid, pName, sIp, Date.now(), key]);
+            await pool.query(
+                'UPDATE keys SET hwid = $1, player_name = $2, server_ip = $3, last_seen = $4, status = $5 WHERE key = $6', 
+                [hwid, finalPlayerField, finalServerField, Date.now(), finalStatusField, key]
+            );
             return res.json({ success: true });
         } else {
             if (row.hwid.trim().toUpperCase() === hwid) {
-                await pool.query('UPDATE keys SET player_name = $1, server_ip = $2, last_seen = $3 WHERE key = $4', [pName, sIp, Date.now(), key]);
+                await pool.query(
+                    'UPDATE keys SET player_name = $1, server_ip = $2, last_seen = $3, status = $4 WHERE key = $5', 
+                    [finalPlayerField, finalServerField, Date.now(), finalStatusField, key]
+                );
                 return res.json({ success: true });
             } else {
                 return res.json({ success: false, error: 'Ошибка HWID привязки' });
@@ -104,7 +139,8 @@ app.get('/api/verify', async (req, res) => {
     }
 });
 
-// Генерация нового ключа (Исправлено для PostgreSQL)
+// === ОСТАЛЬНЫЕ АДМИН-МАРШРУТЫ БЕЗ ИЗМЕНЕНИЙ СТРУКТУРЫ ===
+
 app.post('/api/admin/generate-license', async (req, res) => {
     const { timeInput } = req.body;
     const genPart = () => Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -112,7 +148,6 @@ app.post('/api/admin/generate-license', async (req, res) => {
     const addMs = parseTimeToMs(timeInput);
 
     try {
-        // Убрали ручной подсчет ID, база данных Neon сделает это автоматически
         await pool.query(
             'INSERT INTO keys (key, hwid, status, expires_at, duration_ms, type, last_seen, player_name, server_ip, banned_until, login, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
             [newKey, null, 'active', 0, addMs, 'license', 0, '—', '—', 0, null, null]
@@ -123,7 +158,6 @@ app.post('/api/admin/generate-license', async (req, res) => {
     }
 });
 
-// Продление времени ключа на выбранный период
 app.post('/api/admin/extend', async (req, res) => {
     const targetId = parseInt(req.body.id);
     const addMs = parseTimeToMs(req.body.timeInput);
@@ -151,7 +185,6 @@ app.post('/api/admin/extend', async (req, res) => {
     }
 });
 
-// Полное удаление ключа
 app.post('/api/admin/delete', async (req, res) => {
     try {
         await pool.query('DELETE FROM keys WHERE id = $1', [parseInt(req.body.id)]);
@@ -161,7 +194,6 @@ app.post('/api/admin/delete', async (req, res) => {
     }
 });
 
-// Переключение Бана / Разбана
 app.post('/api/admin/toggle-status', async (req, res) => {
     const targetId = parseInt(req.body.id);
     try {
@@ -183,7 +215,6 @@ app.post('/api/admin/toggle-status', async (req, res) => {
     }
 });
 
-// Получение списка всех ключей
 app.get('/api/admin/keys', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM keys ORDER BY id ASC');
