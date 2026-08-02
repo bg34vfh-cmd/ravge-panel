@@ -89,7 +89,7 @@ app.post('/api/auth', async (req, res) => {
             return res.status(404).json({ success: false, message: "Лицензия не найдена." });
         }
 
-        const license = result.rows[0];
+        const license = result.rows[0]; // Исправлено: берем первый элемент массива строк
 
         if (license.is_banned) {
             return res.status(403).json({ success: false, message: "Данная лицензия заблокирована." });
@@ -98,6 +98,15 @@ app.post('/api/auth', async (req, res) => {
         // Если привязка HWID уже существует, проверяем на совпадение
         if (license.hwid && hwid && license.hwid !== hwid) {
             return res.status(403).json({ success: false, message: "Ошибка авторизации: неверный HWID." });
+        }
+
+        // ПРОВЕРКА НА ПЕРВЫЙ ВХОД: Если логин не задан (дефолтное значение '—')
+        if (!license.web_login || license.web_login === '—') {
+            return res.json({ 
+                success: true, 
+                need_registration: true, 
+                message: "Введите .reg логин пароль" 
+            });
         }
 
         const now = new Date();
@@ -112,15 +121,6 @@ app.post('/api/auth', async (req, res) => {
             return res.status(403).json({ success: false, message: "Срок действия лицензии истек." });
         }
 
-        // МОДИФИКАЦИЯ: Проверяем, привязан ли логин. Если логин дефолтный ('—'), просим регистрацию
-        if (!license.web_login || license.web_login === '—') {
-            return res.json({ 
-                success: true, 
-                need_register: true, 
-                message: "Введите .reg логин пароль" 
-            });
-        }
-
         // Обновляем данные сессии софта (HWID привязывается при первом входе)
         const updated = await pool.query(
             `UPDATE licenses 
@@ -133,8 +133,8 @@ app.post('/api/auth', async (req, res) => {
 
         res.json({ 
             success: true, 
-            need_register: false,
-            message: "Авторизация успешна. Функционал чита открыт.", 
+            need_registration: false,
+            message: "Авторизация успешна.", 
             expires_at: updated.rows[0].expires_at 
         });
 
@@ -144,12 +144,12 @@ app.post('/api/auth', async (req, res) => {
     }
 });
 
-// НОВЫЙ ЭНДПОИНТ ДЛЯ КОМАНДЫ .REG
-app.post('/api/register_login', async (req, res) => {
-    const { license_key, web_login, hwid, server_name } = req.body;
+// Эндпоинт для обработки команды .reg из чата игры
+app.post('/api/auth/register_command', async (req, res) => {
+    const { license_key, web_login } = req.body;
 
     if (!license_key || !web_login || web_login === '—') {
-        return res.status(400).json({ success: false, message: "Неверные данные для регистрации." });
+        return res.status(400).json({ success: false, message: "Некорректные регистрационные данные." });
     }
 
     try {
@@ -161,41 +161,36 @@ app.post('/api/register_login', async (req, res) => {
         const license = result.rows[0];
 
         if (license.is_banned) {
-            return res.status(403).json({ success: false, message: "Лицензия заблокирована." });
+            return res.status(403).json({ success: false, message: "Данная лицензия заблокирована." });
         }
 
-        // Если ключ еще не активирован (нет даты окончания), активируем его прямо сейчас на основе duration_ms
+        // Если дата окончания еще не установлена (ключ ни разу не активировался через веб)
         let expiresAt = license.expires_at;
-        let durationMs = license.duration_ms;
-
         if (!expiresAt) {
-            const currentDuration = parseInt(durationMs) || (30 * 24 * 60 * 60 * 1000); // 30 дней по дефолту, если 0
-            expiresAt = new Date(Date.now() + currentDuration);
-            durationMs = 0;
+            const duration = license.duration_ms > 0 ? parseInt(license.duration_ms) : 30 * 24 * 60 * 60 * 1000;
+            expiresAt = new Date(Date.now() + duration);
         }
 
-        // Сохраняем логин, hwid и обновляем время
-        const updated = await pool.query(
+        // Сохраняем введенный .reg логин/пароль и активируем временные рамки
+        await pool.query(
             `UPDATE licenses 
              SET web_login = $1, 
-                 hwid = COALESCE(hwid, $2),
-                 expires_at = $3,
-                 duration_ms = $4,
-                 last_server = $5,
+                 expires_at = $2, 
+                 duration_ms = 0,
                  last_seen = NOW() 
-             WHERE id = $6 RETURNING *`,
-            [web_login, hwid, expiresAt, durationMs, server_name || 'Активен', license.id]
+             WHERE id = $3`,
+            [web_login, expiresAt, license.id]
         );
 
         res.json({ 
             success: true, 
-            message: "Регистрация успешна! Функционал чита открыт.", 
-            expires_at: updated.rows[0].expires_at 
+            message: "Регистрация успешна! Функционал чита открыт.",
+            expires_at: expiresAt
         });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: "Внутренняя ошибка сервера." });
+        res.status(500).json({ success: false, message: "Ошибка при регистрации аккаунта." });
     }
 });
 
